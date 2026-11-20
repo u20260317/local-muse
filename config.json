@@ -229,5 +229,22 @@
       "quota_note": "占位源：需自行寻找当期提供免费试用的视频生成服务并填写地址",
       "risk_note": "示例占位，未配置 base_url 时永不调用；切勿填写来路不明的服务"
     }
-  ]
+  ],
+  "pipeline": {
+    "disabled": [],
+    "order": []
+  },
+  "planner": {
+    "history_token_budget": 600,
+    "conversation_token_budget": 400
+  },
+  "agent_loop": {
+    "enabled": true,
+    "goal": "持续产出高质量短视频内容，并根据复盘持续优化",
+    "max_rounds_per_day": 6,
+    "dry_run": false
+  },
+  "memory": {
+    "enabled": true
+  }
 }

@@ -31,13 +31,16 @@ LOG = get_logger("scheduler")
 
 
 class Scheduler:
-    def __init__(self, config, db, hardware, pool, vault) -> None:
+    def __init__(self, config, db, hardware, pool, vault, memory=None) -> None:
         self.config = config
         self.db = db
         self.hardware = hardware
         self.pool = pool
         self.vault = vault
+        self.memory = memory
         self.skill_loader = SkillLoader()
+        self._snapshot_cache: dict | None = None
+        self._snapshot_cache_at: float = 0.0
 
         self.queue: asyncio.PriorityQueue | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -55,12 +58,17 @@ class Scheduler:
         self._lock = threading.RLock()                    # 保护跨线程读取的快照
         self._services = {
             "config": config, "db": db, "pool": pool, "vault": vault,
+            "memory": memory,
             "hardware": hardware, "skill_loader": self.skill_loader,
             "engine_token": vault.engine_token(),       # 仅决策引擎持有
             "register_pid": self.register_pid,
             "unregister_pid": self.unregister_pid,
             "on_report": self._persist,
         }
+
+    def _invalidate_snapshot(self) -> None:
+        self._snapshot_cache = None
+        self._snapshot_cache_at = 0.0
 
     # ---------- 生命周期 ----------
     def set_hardware_gate(self, enabled: bool) -> None:
@@ -252,6 +260,12 @@ class Scheduler:
         runtime.message = message[:300]
         runtime.stage = "retry" if attempt < retry_times else final_status.value
         self._kill_pids(runtime.spec.task_id)
+        # 失败写入长期记忆：同技能同类失败下次计划前会被召回，避免无记忆地重复踩坑
+        if self.memory is not None:
+            try:
+                self.memory.record_failure(runtime.spec.skill, runtime.stage, message)
+            except Exception:
+                pass
         self._persist(runtime)
         LOG.warning("任务异常 task=%s 第 %s/%s 次：%s",
                     runtime.spec.task_id, attempt + 1, retry_times + 1, message[:160])
@@ -311,6 +325,39 @@ class Scheduler:
         """schedule 回调运行在线程中，用线程安全方式把任务提交回调度 loop。"""
         if self.loop and not self._stop_event.is_set():
             asyncio.run_coroutine_threadsafe(self._enqueue_scheduled(), self.loop)
+            asyncio.run_coroutine_threadsafe(self._enqueue_agent_round(), self.loop)
+
+    async def _enqueue_agent_round(self) -> None:
+        """目标续行（借鉴 DSH 的 goal-round-driver）：按 config.agent_loop 的目标自动续跑。
+
+        防跑飞三闸：每日轮数上限、同一时间最多一轮 agent_loop 在排队/运行、
+        技能只在已启用列表内轮转。续行指令会带上最近一轮复盘，让下一轮不是重复劳动。
+        """
+        cfg = self.config.section("agent_loop") or {}
+        if not cfg.get("enabled"):
+            return
+        max_rounds = int(cfg.get("max_rounds_per_day", 6))
+        done_today = self.db.count_today("agent_loop")
+        if done_today >= max_rounds:
+            return
+        with self._lock:
+            busy = any(r.spec.source == "agent_loop" for r in self.active.values()) or \
+                any(spec.source == "agent_loop" for _p, _s, spec in self._queued.values())
+        if busy:
+            return
+        names = self.skill_loader.enabled_names() or [self.skill_loader.default_skill()]
+        if not names:
+            return
+        skill = names[done_today % len(names)]
+        last = self.db.recent_prompts(limit=1)
+        hint = (last[0].get("reflection") or "")[:120] if last else "暂无历史复盘"
+        goal = str(cfg.get("goal", "持续产出高质量内容，并根据复盘持续优化"))
+        spec = TaskSpec.create(
+            priority=TaskPriority.SCHEDULED, source="agent_loop", enqueue_mode="queue",
+            skill=skill, dry_run=bool(cfg.get("dry_run", False)),
+            instruction=f"目标续行第 {done_today + 1} 轮 · 目标：{goal} · 上轮复盘：{hint}")
+        await self.submit(spec)
+        LOG.info("目标续行入队 round=%s/%s skill=%s", done_today + 1, max_rounds, skill)
 
     async def _enqueue_scheduled(self) -> None:
         limit = int(self.config.section("scheduler").get("daily_task_limit", 10))
@@ -347,6 +394,7 @@ class Scheduler:
             "pid": runtime.pid,
         }
         record.update(extra)
+        self._invalidate_snapshot()
         try:
             self.db.upsert_task(record)
         except Exception as exc:
@@ -374,7 +422,13 @@ class Scheduler:
         return bool(self._degraded)
 
     def snapshot(self) -> dict:
-        return {
+        # 投影缓存（借鉴 DSH 的 session-projection-cache）：1 秒内复用同一份快照，
+        # 面板高频轮询不再每次全量现算；任务状态一有落库变更即由 _persist 主动失效。
+        now = time.monotonic()
+        if self._snapshot_cache is not None and now - self._snapshot_cache_at < 1.0:
+            return self._snapshot_cache
+        agent_cfg = self.config.section("agent_loop") or {}
+        snap = {
             "active": self.active_snapshot(),
             "queued": self.queue_snapshot(),
             "active_count": len(self.active),
@@ -386,4 +440,14 @@ class Scheduler:
             "today": self.db.count_today(),
             "daily_limit": int(self.config.section("scheduler").get("daily_task_limit", 10)),
             "providers": self.pool.snapshot(),
+            "agent_loop": {
+                "enabled": bool(agent_cfg.get("enabled")),
+                "goal": str(agent_cfg.get("goal", "")),
+                "rounds_today": self.db.count_today("agent_loop"),
+                "max_rounds_per_day": int(agent_cfg.get("max_rounds_per_day", 6)),
+            },
+            "memory": self.memory.stats() if self.memory is not None else {"total": 0, "by_kind": {}},
         }
+        self._snapshot_cache = snap
+        self._snapshot_cache_at = now
+        return snap

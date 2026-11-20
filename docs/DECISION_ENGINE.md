@@ -94,3 +94,12 @@ finally 里只要签发过就 `vault.revoke(task_id)`；Scheduler 的 cancel 与
   技能名含 research 会自动触发浏览器阶段——这是约定，不要另加开关字段。
 - **换/加文本源**：只改 config.json providers（见 DEPLOY.md 第 6 节），不要在 planner 里写死任何端点。
 - **改重试/并发**：改 config.json scheduler 段，不要改代码默认值散落各处。
+
+## 8. v1.1 Agent Loop 升级（插件化 / Token / 记忆 / 续行）
+
+- **阶段插件化**：七阶段注册到 pipeline 注册表（agent_engine/pipeline.py），task_loop 只组装 ctx 并按表执行；注册表支持并行组，但 browser/image 均为重型子进程，老硬件上默认串行（保守策略，见 PLUGIN_GUIDE 第 6 节）。加阶段走 docs/PLUGIN_GUIDE.md，不要再往 execute() 里塞 if。
+- **Token 计量与压缩**：core/token_meter.py 负责估算与预算压缩；planner 喂历史前先按 planner.history_token_budget / conversation_token_budget 压缩；api_pool.call_text 把每次调用的估算 token 记入 TokenLedger，面板 providers 快照带 tokens_in_est/tokens_out_est。
+- **长期记忆**：core/memory.py（SQLite memories 表）；reflect 写 lesson、调度失败写 failure、plan 前召回，详见 docs/MEMORY_MODULE.md。
+- **目标续行**：Scheduler._enqueue_agent_round 按 config.agent_loop 在每个调度 tick 检查：启用、未达 max_rounds_per_day、无在跑/排队的 agent_loop 任务，三闸全过才入队一轮，指令带上轮复盘摘要。
+- **快照投影缓存**：Scheduler.snapshot() 1 秒 TTL 缓存，_persist 落库即失效；面板高频轮询不再全量现算。
+- **连接池**：api_pool 的 HTTP 改为线程级 Session 复用（pool 16），_http_json 接口不变。

@@ -15,16 +15,19 @@ from __future__ import annotations
 import json
 import re
 
+from core import token_meter
 from core.logger import get_logger
 
 LOG = get_logger("planner")
 
 
-def _template_plan(spec, skill: dict, history: list[dict]) -> dict:
+def _template_plan(spec, skill: dict, history: list[dict],
+                   memory_lines: list[str] | None = None) -> dict:
     """无可用文本 API 时的确定性计划模板（不联网也能跑通全链路）。"""
     body = (skill.get("body") or "")[:1200]
     lessons = "；".join(
-        (h.get("reflection") or "")[:60] for h in history[:3] if h.get("reflection")
+        list(memory_lines or []) +
+        [(h.get("reflection") or "")[:60] for h in history[:3] if h.get("reflection")]
     )
     topic = spec.instruction.strip() or skill.get("title") or "每日祝福短视频"
     style = "温暖治愈、国风轻渐变、竖屏 9:16、柔和光晕、字幕清晰"
@@ -74,6 +77,36 @@ async def build_plan(services: dict, spec) -> dict:
     conv_id = getattr(spec, "conversation_id", "") or ""
     conversation = db.conversation_context(conv_id, limit=8) if conv_id else []
 
+    # Token 预算压缩：历史复盘与会话上下文先计量、超预算按「保新弃旧」规则压缩，
+    # 避免本地小模型上下文被长历史撑爆（借鉴 DSH 的 token-meter/上下文压缩插件）
+    planner_cfg = {}
+    try:
+        planner_cfg = services["config"].section("planner") or {}
+    except Exception:
+        planner_cfg = {}
+    hist_budget = int(planner_cfg.get("history_token_budget", 600))
+    conv_budget = int(planner_cfg.get("conversation_token_budget", 400))
+    _refl = token_meter.compress_texts([h.get("reflection", "") for h in history], hist_budget)
+    history = [dict(h, reflection=r) for h, r in zip(history, _refl)]
+    _conv = token_meter.compress_texts([str(m.get("content", "")) for m in conversation], conv_budget)
+    conversation = [dict(m, content=c) for m, c in zip(conversation, _conv)]
+
+    # 长期记忆召回（core/memory.py）：同技能的历史经验 + 失败教训，跨任务跨重启可用
+    memory_lines: list[str] = []
+    memory = services.get("memory")
+    if memory is not None:
+        try:
+            _lessons = memory.recall(query=f"{spec.instruction} {skill.get('title', '')}",
+                                     kind="lesson", scope=skill.get("name"), limit=3)
+            _fails = memory.recall(query=spec.instruction, kind="failure",
+                                   scope=skill.get("name"), limit=2)
+            memory_lines = ([f"经验：{m['content'][:120]}" for m in _lessons] +
+                            [f"避坑（累计失败{m['hits']}次）：{m['content'][:120]}" for m in _fails])
+            if memory_lines:
+                LOG.info("task=%s 召回长期记忆 %s 条", spec.task_id, len(memory_lines))
+        except Exception as exc:
+            LOG.warning("task=%s 长期记忆召回失败（忽略）：%s", spec.task_id, str(exc)[:80])
+
     if not spec.dry_run:
         provider = await pool.pick("text", exclude=set())
         if provider:
@@ -86,13 +119,14 @@ async def build_plan(services: dict, spec) -> dict:
                     f"选题：{spec.instruction}\n技能：{skill.get('title')}\n"
                     f"技能正文：{(skill.get('body') or '')[:800]}\n"
                     f"历史复盘：{[h.get('reflection', '')[:80] for h in history[:3]]}\n"
+                    f"长期记忆：{memory_lines}\n"
                     f"会话上下文：{[m['content'][:120] for m in conversation]}"},
             ]
             try:
                 text = await pool.call_text(provider, messages, spec.task_id)
                 parsed = _extract_json(text)
                 if parsed and parsed.get("prompt"):
-                    plan = _template_plan(spec, skill, history)
+                    plan = _template_plan(spec, skill, history, memory_lines)
                     plan.update({k: v for k, v in parsed.items() if v is not None})
                     plan["source"] = "llm"
                     plan["provider"] = provider
@@ -101,7 +135,7 @@ async def build_plan(services: dict, spec) -> dict:
             except Exception as exc:
                 LOG.warning("task=%s 文本模型失败，降级模板：%s", spec.task_id, str(exc)[:120])
 
-    plan = _template_plan(spec, skill, history)
+    plan = _template_plan(spec, skill, history, memory_lines)
     if spec.dry_run:
         plan["source"] = "dry_run"
     LOG.info("task=%s 计划来源=%s 选题=%s", spec.task_id, plan["source"], plan["topic"][:40])
@@ -141,6 +175,16 @@ async def reflect(services: dict, runtime, plan: dict, result: dict,
         reflection=f"状态={runtime.status.value} 重试={runtime.retry} 来源={plan.get('source')}；{reflection}",
         score=score,
     )
+    # 同步沉淀到长期记忆：下次同技能任务计划前会被 recall 召回，不再只靠最近几条历史
+    memory = services.get("memory")
+    if memory is not None:
+        try:
+            memory.remember(kind="lesson", scope=spec.skill,
+                            key=plan.get("topic", "") or spec.instruction[:40],
+                            content=f"score={score}；{reflection}",
+                            weight=1.0 if succeeded else 0.5)
+        except Exception:
+            pass
     note = {
         "task_id": spec.task_id,
         "skill": spec.skill,

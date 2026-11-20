@@ -19,15 +19,36 @@ import time
 from collections import deque
 from pathlib import Path
 
+from core import token_meter
 from core.logger import get_logger
 
 LOG = get_logger("api_pool")
 
 
+_TLS = threading.local()
+
+
+def _session():
+    """线程级 requests.Session 连接池复用：避免每次调用都重新 TCP/TLS 握手。
+
+    Session 按线程隔离（threading.local），兼顾 requests 的线程安全边界；
+    本地 zen-gate 是回环 HTTP，收益主要在远程源与高频轮询场景。
+    """
+    import requests
+    from requests.adapters import HTTPAdapter
+    sess = getattr(_TLS, "session", None)
+    if sess is None:
+        sess = requests.Session()
+        adapter = HTTPAdapter(pool_connections=16, pool_maxsize=16)
+        sess.mount("http://", adapter)
+        sess.mount("https://", adapter)
+        _TLS.session = sess
+    return sess
+
+
 def _http_json(url: str, headers: dict, body: dict, timeout: int) -> dict:
     """同步 HTTP POST（只在 to_thread / 子进程中调用）。"""
-    import requests
-    response = requests.post(url, headers=headers, json=body, timeout=max(5, int(timeout)))
+    response = _session().post(url, headers=headers, json=body, timeout=max(5, int(timeout)))
     try:
         data = response.json()
     except ValueError:
@@ -66,6 +87,7 @@ class ApiPool:
         self._inflight: dict[str, int] = {}
         self._rr: dict[str, int] = {}
         self._usage: deque[dict] = deque(maxlen=300)
+        self._ledger = token_meter.TokenLedger()
         for provider in config.providers():
             self._semaphores[provider["name"]] = asyncio.Semaphore(
                 max(1, int(provider.get("max_concurrency", 1))))
@@ -198,8 +220,12 @@ class ApiPool:
             text = _extract_text(response.get("data", {}))
             if not text:
                 raise RuntimeError(f"{provider} 响应中未找到文本内容")
+            tokens_in = token_meter.estimate_messages_tokens(messages)
+            tokens_out = token_meter.estimate_tokens(text)
+            self._ledger.add(provider, tokens_in, tokens_out)
             self.note_usage(provider, "text", task_id, "ok",
-                            int((time.monotonic() - started) * 1000))
+                            int((time.monotonic() - started) * 1000),
+                            f"tokens≈{tokens_in}+{tokens_out}")
             return text
         except Exception:
             self.note_usage(provider, "text", task_id, "error",
@@ -269,6 +295,7 @@ class ApiPool:
     # ---------- 面板快照 ----------
     def snapshot(self) -> dict[str, dict]:
         now = time.time()
+        ledger = self._ledger.snapshot()
         result = {}
         for provider in self.config.providers():
             name = provider["name"]
@@ -286,6 +313,8 @@ class ApiPool:
                 "rpm": int(provider.get("rpm", 6)),
                 "max_concurrency": int(provider.get("max_concurrency", 1)),
                 "inflight": inflight, "cooldown_s": cooldown, "calls": used,
+                "tokens_in_est": ledger.get(name, {}).get("tokens_in_est", 0),
+                "tokens_out_est": ledger.get(name, {}).get("tokens_out_est", 0),
                 "doc": provider.get("doc", ""),
                 "quota_note": provider.get("quota_note", ""),
                 "risk_note": provider.get("risk_note", ""),

@@ -10,7 +10,7 @@
 [![Engine](https://img.shields.io/badge/Browser-Browserr%20·%20Servo-orange?style=for-the-badge)](#核心特色)
 [![API](https://img.shields.io/badge/API-本地%20zen--gate%20only-brightgreen?style=for-the-badge)](#核心特色)
 
-**调度器 7×24 接单 → 决策引擎出计划 → 隔离浏览器采集 → 文/图/视频生成 → 独立复盘自我迭代**
+**调度器 7×24 接单 → 决策引擎出计划 → 隔离浏览器采集 → 文/图/视频生成 → 独立复盘 → 长期记忆沉淀 → 目标自动续行**
 **全程本地运行，不接管系统浏览器，不调用任何远程 API 站点**
 
 [🚀 快速开始](#快速开始) · [📐 项目设计](docs/DESIGN.md) · [🧭 决策引擎](docs/DECISION_ENGINE.md) · [🧩 模块地图](docs/MODULES.md) · [🛠 部署手册](docs/DEPLOY.md) · [🤖 AI 维护指南](docs/AI_GUIDE.md)
@@ -68,11 +68,21 @@ export ZEN_GATE_API_KEY=<zen-gate mainKey>
 | [docs/AI_GUIDE.md](docs/AI_GUIDE.md) | 给接手 AI 的维护指南：10 条不变量、改动配方、验证清单 |
 | [docs/BROWSERR_ZENGATE.md](docs/BROWSERR_ZENGATE.md) | Browserr + zen-gate 迁移说明与全量实测结果 |
 
+## 🙏 致谢
+
+本项目的浏览器与本地 API 能力站在两个开源项目的肩膀上：
+
+- **[Browserr](https://github.com/Omodaka9375/browserr)**（作者 Omodaka9375，Apache-2.0）—— 基于 [Servo](https://servo.org/) 的轻量浏览器引擎，本项目的默认采集引擎；安装时从其官方 Release 下载，不打包分发。
+- **[zen-gate](https://github.com/LAGcomcom/zen-gate)**（作者 LAGcomcom，MIT）—— 本地 OpenAI 兼容网关，本项目唯一的默认文本 API 源；由用户本机自行部署，本项目仅通过 API 调用。
+
+完整的第三方清单与许可说明见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
 ## 版本
 
 | 版本 | 内容 | 入口 |
 |---|---|---|
-| **browserr-zengate-v1.0.0**（当前主线） | Browserr（Servo）+ 本地 zen-gate + 全模块化文档 | [Release](https://github.com/u20260317/local-muse/releases/tag/browserr-zengate-v1.0.0) |
+| **agent-loop-v1.1.0**（当前主线） | 阶段插件化 + 目标续行 + Token 计量/压缩 + SQLite 长期记忆 + 面板智能状态卡 | [Release](https://github.com/u20260317/local-muse/releases/tag/agent-loop-v1.1.0) |
+| browserr-zengate-v1.0.0 | Browserr（Servo）+ 本地 zen-gate + 全模块化文档 | [Release](https://github.com/u20260317/local-muse/releases/tag/browserr-zengate-v1.0.0) |
 | original-chromium-v1.0.0（存档） | 最初的 Chromium / Playwright + 远程源聚合版，仅存档对照 | [Release](https://github.com/u20260317/local-muse/releases/tag/original-chromium-v1.0.0) |
 
 ## 实测状态（2026-11-20）

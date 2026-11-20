@@ -93,6 +93,10 @@ def create_app(ctx: dict) -> Flask:
     def page_logs():
         return render_template("logs.html", page="logs")
 
+    @app.get("/memory")
+    def page_memory():
+        return render_template("memory.html", page="memory")
+
     # ---------------- 状态 / 任务 ----------------
     @app.get("/api/status")
     def api_status():
@@ -111,6 +115,33 @@ def create_app(ctx: dict) -> Flask:
             "server_time": time.time(),
         })
         return jsonify(status)
+
+    @app.get("/api/pipeline")
+    def api_pipeline():
+        # 阶段插件注册表：名称/权限/并行组/启停状态，供看板与插件管理展示
+        from agent_engine import pipeline as _pipeline
+        from agent_engine import task_loop as _task_loop  # noqa: F401  导入即完成内置插件注册
+        return jsonify({"ok": True, "plugins": _pipeline.describe_all(config)})
+
+    @app.get("/api/memory")
+    def api_memory():
+        memory = ctx.get("memory")
+        if memory is None:
+            return jsonify({"ok": True, "enabled": False, "items": [], "stats": {"total": 0, "by_kind": {}}})
+        query = request.args.get("q", "")
+        kind = request.args.get("kind") or None
+        if query:
+            items = memory.recall(query=query, kind=kind, limit=30)
+        else:
+            items = memory.recent(limit=50, kind=kind)
+        return jsonify({"ok": True, "enabled": True, "items": items, "stats": memory.stats()})
+
+    @app.delete("/api/memory/<int:memory_id>")
+    def api_memory_delete(memory_id: int):
+        memory = ctx.get("memory")
+        if memory is None:
+            return fail(RuntimeError("记忆模块未启用"))
+        return jsonify({"ok": memory.delete(memory_id)})
 
     @app.get("/api/tasks")
     def api_tasks():

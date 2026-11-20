@@ -59,3 +59,12 @@
   写一条 material 说明并跳过，不冒充已注入。
 - Cookie/localStorage 改为 goto 落地后注入（HttpOnly Cookie 无法写入）。
 - Servo 对重型 SPA/DRM/WebRTC 的兼容性不如 Chromium，见 Browserr 官方说明。
+
+## 排障：page never became ready / no matching event
+
+浏览器引擎能启动、navigate 能发出，但页面永不 ready、eval 报
+`TimeoutError: no matching event; recent: []` 时，优先怀疑**图形库缺失**而不是代码：
+Servo 渲染依赖 libEGL/libGL/libgbm，系统重装或运行环境更换后可能丢失。
+自查：`ldconfig -p | grep libEGL.so.1` 无输出即缺失；
+修复：`apt-get install -y libegl1 libgl1 libgbm1 libgl1-mesa-dri` 后重启服务再测。
+（2026-11-20 实测：沙箱 VM 更换后该库丢失导致真实采集连续失败，补装后 3.7 秒 ready 恢复正常。）

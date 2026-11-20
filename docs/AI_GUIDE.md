@@ -47,6 +47,10 @@ retry_times/subprocess_memory_limit_mb），不要改代码里的默认值散落
 **改数据表**：core/db.py 的 CREATE TABLE IF NOT EXISTS 区加迁移；models.py 改字段后全局搜
 `runtime.`/`spec.` 引用；tasks 表落库字段在 Scheduler._persist 里统一收口。
 
+**改记忆/Token 相关**：core/memory.py 与 core/token_meter.py 都是零业务依赖的基础层，
+改 recall/压缩算法后必须单独跑一遍召回与压缩的断言脚本（见 PLUGIN_GUIDE 与 MEMORY_MODULE 的算法说明），
+并确认 planner 在 services["memory"]=None 时仍能正常出计划（v1.0 退路）。
+
 ## 4. 验证清单（每次改动后按改动面勾选，全过才许说「完成」）
 
 ```bash

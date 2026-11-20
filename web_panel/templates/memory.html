@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}长期记忆库{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <div class="eyebrow">SQLITE LONG-TERM MEMORY</div>
+    <h1>长期记忆库</h1>
+    <p class="sub">经验（lesson）、失败教训（failure）、事实（fact）跨任务、跨重启沉淀；决策引擎在计划前按相关性召回，避免无记忆地重复踩坑。</p>
+  </div>
+  <div class="hero-metrics">
+    <div class="metric"><span>总条数</span><b id="mem-total">0</b></div>
+    <div class="metric"><span>经验 lesson</span><b id="mem-lesson">0</b></div>
+    <div class="metric"><span>失败 failure</span><b id="mem-failure">0</b></div>
+    <div class="metric"><span>事实 fact</span><b id="mem-fact">0</b></div>
+  </div>
+</section>
+
+<section class="glass section-gap">
+  <div class="section-head"><h2>检索记忆</h2><span class="hint">输入关键词按相关性召回（词项命中 + 权重 + 新近度）</span></div>
+  <div class="form-row">
+    <label class="grow">关键词<input id="mem-q" type="text" placeholder="例如：祝福视频 风格 / 浏览器 超时"></label>
+    <label>类型
+      <select id="mem-kind">
+        <option value="">全部</option><option value="lesson">lesson 经验</option>
+        <option value="failure">failure 失败</option><option value="fact">fact 事实</option>
+        <option value="preference">preference 偏好</option>
+      </select>
+    </label>
+    <button class="btn btn-primary" id="mem-search" type="button">召回</button>
+    <button class="btn btn-ghost" id="mem-reset" type="button">看全部</button>
+  </div>
+  <div id="memory-list"><div class="empty">加载中…</div></div>
+</section>
+{% endblock %}

@@ -62,6 +62,23 @@
     const sources = Object.values(data.providers || {});
     set('metric-inflight', sources.reduce((n, p) => n + (p.inflight || 0), 0));
     set('metric-cooldown', sources.filter((p) => p.cooldown_s > 0).length);
+    // v1.1 智能状态卡（元素不存在的页面自动跳过）
+    const loop = data.agent_loop || {};
+    set('smart-loop', loop.enabled ? `${loop.rounds_today || 0} / ${loop.max_rounds_per_day || 0}` : '已关闭');
+    set('smart-goal', '目标：' + (loop.goal || '-'));
+    const tokIn = sources.reduce((n, p) => n + (p.tokens_in_est || 0), 0);
+    const tokOut = sources.reduce((n, p) => n + (p.tokens_out_est || 0), 0);
+    set('smart-tokens', `${tokIn} / ${tokOut}`);
+    const mem = data.memory || { total: 0, by_kind: {} };
+    set('smart-memory', mem.total || 0);
+    set('smart-failures', (mem.by_kind || {}).failure || 0);
+    const plugEl = $('smart-plugins');
+    if (plugEl && !plugEl.dataset.loaded) {
+      plugEl.dataset.loaded = '1';
+      api('/api/pipeline').then((r) => {
+        if (r && r.ok) plugEl.textContent = r.plugins.map((x) => `${x.enabled ? '●' : '○'} ${x.name}`).join('  ·  ');
+      }).catch(() => {});
+    }
   }
 
   /* ---------------- 任务看板 ---------------- */
@@ -683,6 +700,43 @@
     }
   });
 
+  /* ---------------- 长期记忆页 ---------------- */
+  function initMemory() {
+    const list = $('memory-list');
+    if (!list) return;
+    async function load() {
+      const q = ($('mem-q') || {}).value || '';
+      const kind = ($('mem-kind') || {}).value || '';
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (kind) params.set('kind', kind);
+      const r = await api('/api/memory?' + params.toString());
+      if (!r || !r.ok) { list.innerHTML = '<div class="empty">记忆模块未启用或读取失败</div>'; return; }
+      const by = (r.stats || {}).by_kind || {};
+      const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+      set('mem-total', (r.stats || {}).total || 0);
+      set('mem-lesson', by.lesson || 0); set('mem-failure', by.failure || 0); set('mem-fact', by.fact || 0);
+      if (!r.items.length) { list.innerHTML = '<div class="empty">暂无记忆。任务运行并复盘后，经验与失败教训会自动沉淀到这里。</div>'; return; }
+      list.innerHTML = r.items.map((m) => `
+        <div class="glass" style="padding:12px;margin:8px 0">
+          <b>${esc(m.kind)}</b> · <span>${esc(m.scope)}</span> · <code>${esc(m.key)}</code>
+          <span class="hint">权重 ${Number(m.weight).toFixed(1)} · 命中 ${m.hits}</span>
+          <button class="btn btn-ghost" data-mem-del="${m.id}" style="float:right">删除</button>
+          <div>${esc(m.content)}</div>
+        </div>`).join('');
+    }
+    const search = $('mem-search'); if (search) search.addEventListener('click', load);
+    const reset = $('mem-reset'); if (reset) reset.addEventListener('click', () => { $('mem-q').value = ''; load(); });
+    list.addEventListener('click', async (e) => {
+      const id = e.target.dataset ? e.target.dataset.memDel : null;
+      if (!id) return;
+      if (!confirm('删除这条记忆？')) return;
+      await api('/api/memory/' + id, { method: 'DELETE' });
+      load();
+    });
+    load();
+  }
+
   /* ---------------- 启动 ---------------- */
   refreshStatus();
   setInterval(refreshStatus, 2000);
@@ -692,4 +746,5 @@
   if (page === 'skills') initSkills();
   if (page === 'sources') initSources();
   if (page === 'logs') initLogs();
+  if (page === 'memory') initMemory();
 })();

@@ -124,10 +124,13 @@ def build_context(args: argparse.Namespace) -> dict:
     hw = HardwareMonitor(cfg)
     pool = ApiPool(cfg, db)
     vault = Vault(paths.DIRS["vault"])
-    scheduler = Scheduler(cfg, db, hw, pool, vault)
+    from core.memory import MemoryStore
+    memory = MemoryStore(paths.DB_PATH) if (cfg.section("memory") or {}).get("enabled", True) else None
+    scheduler = Scheduler(cfg, db, hw, pool, vault, memory=memory)
     bridge = SchedulerBridge(scheduler)
     ctx = {
         "config": cfg, "db": db, "ring": ring, "hardware": hw, "pool": pool,
+        "memory": memory,
         # 面板只拿到受限视图，无法取得 engine_token 或签发临时凭证
         "vault": vault.panel_view(), "scheduler": scheduler, "bridge": bridge,
         "version": VERSION,

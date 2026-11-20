@@ -10,7 +10,8 @@
 |---|---|---|---|---|
 | task_queue.py | 调度中枢 | `Scheduler.start/stop/submit/cancel/snapshot`、`register_pid/unregister_pid` | core.models、skill_loader、task_loop、schedule | 主循环不许 await 业务；并发/超时只从 config 读 |
 | planner.py | 计划与反思 | `build_plan(services, spec)`、`reflect(services, runtime, plan, result, succeeded)` | services 内的 db/pool/skill_loader | 计划阶段不许抛错阻断任务；prompt 不许含凭证 |
-| task_loop.py | 单任务流水线 | `execute(runtime, services)` | planner、sandbox_wrapper、image_gen、video_gen、paths | 凭证签发/revoke 链不许删；阶段必须经 _report 上报 |
+| task_loop.py | 单任务流水线（插件宿主） | `execute(runtime, services)`；七个阶段函数注册为插件 | pipeline、planner、sandbox_wrapper、image_gen、video_gen、paths | 凭证签发/revoke 链不许删；阶段必须经 _report 上报；新阶段走插件注册不许改主干 |
+| pipeline.py | 阶段插件注册表 | `register/build_pipeline/describe_all` | core.logger | vault:issue 只有 browser 在白名单；并行组内插件必须无数据依赖 |
 | skill_loader.py | Skill 库读写 | `SkillLoader.get/list_skills/save/delete/enabled_names/default_skill` | core.paths | 文件名必须过 NAME_RE + resolve 父目录校验；内置技能不可删 |
 
 ## 生成线 media_generator/
@@ -50,6 +51,8 @@ materials 条目：`{type:"url"|"text"|"note", source, value}`。
 | db.py | SQLite 数据层 | TaskDB（tasks/prompt_history/api_usage/log_index/conversations/messages） | 短事务；按 task_id 隔离；不要在调度主循环里跑慢查询 |
 | hardware.py | 硬件采样降级 | `HardwareMonitor.update()/snapshot()` | 阈值带滞回（recovery_margin），不要改成单点阈值 |
 | logger.py | 日志与脱敏 | `get_logger/bind/set_stage/redact/snapshot` | 新增日志先想脱敏：Key/Cookie/凭证一律走 redact |
+| token_meter.py | Token 计量与压缩 | `estimate_tokens/estimate_messages_tokens/compress_texts`、TokenLedger | 启发式估算只用于预算控制，不许当计费依据 |
+| memory.py | SQLite 长期记忆 | `MemoryStore.remember/recall/record_failure/recent/delete/stats` | 内容禁止含凭证；failure 指纹只累加不新增行 |
 | paths.py | 路径与引擎定位 | `DIRS/session_dir/output_dir/setup_browserr_env/browserr_ready/kill_process_tree` | 运行期目录只许在项目内；不要拼用户主目录路径 |
 
 ## 面板层 web_panel/ 与入口

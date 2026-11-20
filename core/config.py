@@ -50,6 +50,16 @@ DEFAULT_CONFIG: dict = {
         "extra_args": [],
     },
     "upload": {"enabled": False, "repo": "", "target": ""},
+    # v1.1 Agent Loop 相关配置（见 docs/PLUGIN_GUIDE.md / docs/MEMORY_MODULE.md）
+    "pipeline": {"disabled": [], "order": []},
+    "planner": {"history_token_budget": 600, "conversation_token_budget": 400},
+    "agent_loop": {
+        "enabled": True,
+        "goal": "持续产出高质量短视频内容，并根据复盘持续优化",
+        "max_rounds_per_day": 6,
+        "dry_run": False,
+    },
+    "memory": {"enabled": True},
     "providers": [],
 }
 
