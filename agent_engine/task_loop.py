@@ -20,7 +20,8 @@ from core import paths
 from core.logger import get_logger, bind, set_stage
 from agent_engine import pipeline, planner
 from browser_agent import sandbox_wrapper
-from media_generator import image_gen, video_gen
+from media_generator import compose as compose_mod
+from media_generator import image_gen, tts, video_gen
 
 LOG = get_logger("task_loop")
 
@@ -101,10 +102,31 @@ async def _stage_browser(ctx: dict) -> str:
 
 async def _stage_image(ctx: dict) -> str:
     services, runtime, spec = ctx["services"], ctx["runtime"], ctx["spec"]
+    scenes = [s for s in (ctx["plan"].get("scenes") or []) if isinstance(s, dict)]
+    if len(scenes) > 1:
+        # 分镜模式：逐镜出图（串行，照顾老硬件与源商配额），供 compose 合成成片
+        _report(services, runtime, "image", 50, f"分镜出图：共 {len(scenes)} 镜")
+        images = []
+        for idx, scene in enumerate(scenes):
+            _report(services, runtime, "image", 50,
+                    f"分镜出图 {idx + 1}/{len(scenes)}")
+            img = await image_gen.generate(
+                services, spec.task_id,
+                scene.get("image_prompt") or ctx["plan"]["prompt"], spec.dry_run,
+                on_pid=_pid_hook(services, runtime, spec.task_id))
+            images.append(img)
+            ctx["result"]["assets"].append(img)
+            if img.get("simulated"):
+                runtime.simulated = True
+        ctx["images"] = images
+        ctx["image"] = images[0]
+        runtime.provider = images[0].get("provider") or runtime.provider
+        return "image"
     _report(services, runtime, "image", 50, "从 API 池挑选文生图源并下载校验")
     image = await image_gen.generate(services, spec.task_id, ctx["plan"]["prompt"], spec.dry_run,
                                      on_pid=_pid_hook(services, runtime, spec.task_id))
     ctx["image"] = image
+    ctx["images"] = [image]
     ctx["result"]["assets"].append(image)
     if image.get("simulated"):
         runtime.simulated = True
@@ -120,11 +142,72 @@ async def _stage_video(ctx: dict) -> str:
         services, spec.task_id, ctx["plan"]["prompt"],
         reference_image=image.get("path"), dry_run=spec.dry_run,
         on_pid=_pid_hook(services, runtime, spec.task_id))
+    ctx["video"] = video
     ctx["result"]["assets"].append(video)
     if video.get("simulated"):
         runtime.simulated = True
     runtime.provider = video.get("provider") or runtime.provider
     return "video"
+
+
+async def _stage_compose(ctx: dict) -> str:
+    """成片合成：分镜图（+真实视频片段）→ 配音 → ffmpeg 合成竖屏成片。
+
+    合成失败不判任务失败：记录原因并跳过，原始素材仍完整保留（可降级流水线）。
+    """
+    services, runtime, spec = ctx["services"], ctx["runtime"], ctx["spec"]
+    cfg = services["config"].section("compose")
+    if not cfg.get("enabled", True):
+        ctx["result"]["compose"] = {"skipped": True, "reason": "config 关闭"}
+        return "compose(skipped)"
+    _report(services, runtime, "compose", 80, "ffmpeg 合成成片：运镜/转场/字幕/配音/混音")
+    try:
+        from pathlib import Path
+
+        plan_scenes = [s for s in (ctx["plan"].get("scenes") or [])
+                       if isinstance(s, dict)]
+        images = ctx.get("images") or ([ctx["image"]] if ctx.get("image") else [])
+        out_dir = paths.output_dir(spec.task_id)
+        scenes: list[dict] = []
+        for idx, img in enumerate(images):
+            meta = plan_scenes[idx] if idx < len(plan_scenes) else {}
+            scenes.append({"image": img.get("path"),
+                           "narration": meta.get("narration", ""),
+                           "audio": None, "duration": 0.0})
+        # 真实（非模拟）的文生视频片段作为一个动态镜头插入第二位
+        video = ctx.get("video") or {}
+        if video.get("path") and not video.get("simulated"):
+            scenes.insert(min(1, len(scenes)),
+                          {"video": video["path"], "narration": "",
+                           "audio": None, "duration": 5.0})
+        if not scenes:
+            raise RuntimeError("无分镜素材可合成")
+        # 配音：dry_run 不调外部服务；真实任务逐镜合成旁白并实测时长对齐镜头
+        if cfg.get("voice_enabled", True) and not spec.dry_run:
+            for idx, scene in enumerate(scenes):
+                if not scene["narration"]:
+                    continue
+                mp3 = out_dir / f"voice_{idx}.mp3"
+                got = await tts.synthesize_scene(
+                    scene["narration"], mp3, str(cfg.get("voice", tts.DEFAULT_VOICE)))
+                if got:
+                    scene["audio"] = str(got)
+                    scene["duration"] = tts.audio_duration(got) + 0.3
+        composed = await compose_mod.compose(
+            scenes, out_dir / "final.mp4", cfg)
+        asset = {"kind": "video", "path": composed["path"],
+                 "provider": "ffmpeg-compose", "simulated": False,
+                 "note": (f"合成成片：{composed['scenes']} 镜 / {composed['duration']}s / "
+                          f"配音={'有' if composed['voice'] else '无'} / "
+                          f"字幕={'有' if composed['subtitles'] else '无'}")}
+        ctx["result"]["assets"].append(asset)
+        ctx["result"]["final_video"] = composed
+        LOG.info("task=%s 合成完成：%s", spec.task_id, composed["path"])
+        return "compose"
+    except Exception as exc:
+        LOG.warning("task=%s 合成失败（降级跳过）：%s", spec.task_id, str(exc)[:160])
+        ctx["result"]["compose"] = {"skipped": True, "reason": str(exc)[:160]}
+        return "compose(skipped)"
 
 
 async def _stage_upload(ctx: dict) -> str:
@@ -167,6 +250,9 @@ pipeline.register(pipeline.StagePlugin(
 pipeline.register(pipeline.StagePlugin(
     name="video", title="文生/图生视频", progress=72,
     permissions=frozenset({"api:video", "subprocess:media"}), run=_stage_video))
+pipeline.register(pipeline.StagePlugin(
+    name="compose", title="成片合成", progress=80,
+    permissions=frozenset({"subprocess:media", "fs:write"}), run=_stage_compose))
 pipeline.register(pipeline.StagePlugin(
     name="upload", title="上传（可选）", progress=86,
     permissions=frozenset({"network:upload"}), run=_stage_upload))

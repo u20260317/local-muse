@@ -39,6 +39,17 @@
     "repo": "",
     "target": ""
   },
+  "compose": {
+    "enabled": true,
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "scene_seconds": 4.0,
+    "transition_seconds": 0.5,
+    "voice_enabled": true,
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "bgm_path": ""
+  },
   "providers": [
     {
       "name": "zen_gate_local",
@@ -186,7 +197,7 @@
       "style": "dashscope_image",
       "model": "wanx2.1-t2i-turbo",
       "api_key": "",
-      "enabled": false,
+      "enabled": true,
       "weight": 1,
       "rpm": 2,
       "max_concurrency": 1,
@@ -194,6 +205,23 @@
       "doc": "https://help.aliyun.com/zh/model-studio/text-to-image",
       "quota_note": "部分万相模型有免费额度/有效期限制",
       "risk_note": "异步任务接口，需 X-DashScope-Async 头；超出免费额度会计费"
+    },
+    {
+      "name": "wanxiang_video",
+      "kind": "video",
+      "base_url": "https://dashscope.aliyuncs.com",
+      "path": "/api/v1/services/aigc/video-generation/video-synthesis",
+      "style": "dashscope_video",
+      "model": "wanx2.1-t2v-turbo",
+      "api_key": "",
+      "enabled": true,
+      "weight": 1,
+      "rpm": 2,
+      "max_concurrency": 1,
+      "timeout_s": 900,
+      "doc": "https://help.aliyun.com/zh/model-studio/text-to-video",
+      "quota_note": "万相视频模型对新用户有免费额度，以百炼控制台为准",
+      "risk_note": "异步任务接口，需 X-DashScope-Async 头；与 wanxiang_free 共用同一个 DashScope Key；超出免费额度会计费"
     },
     {
       "name": "minimax_video",

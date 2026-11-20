@@ -246,6 +246,8 @@ class ApiPool:
         style = provider.get("style", "generic_image")
         headers = {"Content-Type": "application/json"}
         poll_url = ""
+        poll_interval = 5
+        poll_max = 24
         if style == "hf_inference":
             headers["Authorization"] = f"Bearer {key}"
             body = {"inputs": prompt[:1000]}
@@ -256,6 +258,15 @@ class ApiPool:
                     "input": {"prompt": prompt[:1000]},
                     "parameters": {"size": "720*1280", "n": 1}}
             poll_url = f"{base}/api/v1/tasks/{{task_id}}"
+        elif style == "dashscope_video":
+            headers["Authorization"] = f"Bearer {key}"
+            headers["X-DashScope-Async"] = "enable"
+            body = {"model": provider.get("model", ""),
+                    "input": {"prompt": prompt[:1000]},
+                    "parameters": {"size": "1280*720", "duration": 5}}
+            poll_url = f"{base}/api/v1/tasks/{{task_id}}"
+            poll_interval = 10
+            poll_max = 72
         elif style == "minimax_video":
             headers["Authorization"] = f"Bearer {key}"
             body = {"model": provider.get("model", ""), "prompt": prompt[:1000]}
@@ -270,22 +281,29 @@ class ApiPool:
                     "aspect_ratio": "9:16", "response_format": "url"}
             poll_url = f"{url}?task_id={{task_id}}"
 
-        # 参考图：本地文件转 data URL 后随请求发送；URL 形式直接透传
+        # 参考图：本地文件转 data URL 后随请求发送；URL 形式直接透传。
+        # DashScope 视频走 input.img_url（图生视频），其余服务商用顶层 first_frame_image。
         if reference_image:
             if str(reference_image).startswith(("http://", "https://")):
-                body["first_frame_image"] = reference_image
+                ref_value = str(reference_image)
             else:
+                ref_value = ""
                 path = Path(reference_image)
                 if path.exists() and path.is_file():
                     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-                    body["first_frame_image"] = f"data:image/png;base64,{encoded}"
+                    ref_value = f"data:image/png;base64,{encoded}"
+            if ref_value:
+                if style == "dashscope_video":
+                    body.setdefault("input", {})["img_url"] = ref_value
+                else:
+                    body["first_frame_image"] = ref_value
 
         return {
             "ok": True, "kind": kind, "provider": provider_name, "style": style,
             "task_id": task_id, "dry_run": False,
             "url": url, "headers": headers, "body": body,
             "poll_url": poll_url, "poll_headers": {"Authorization": f"Bearer {key}"},
-            "poll_interval_s": 5, "max_polls": 24,
+            "poll_interval_s": poll_interval, "max_polls": poll_max,
             "timeout_s": int(provider.get("timeout_s", 120)),
             "prompt_preview": prompt[:100],
             "memory_limit_mb": int(self.config.section("scheduler")

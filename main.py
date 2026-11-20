@@ -53,6 +53,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run-count", type=int, default=3, help="自检任务条数")
     parser.add_argument("--host", default=None, help="仅允许回环地址")
     parser.add_argument("--port", type=int, default=None, help="本机监听端口")
+    parser.add_argument("--tray", action="store_true",
+                        help="系统托盘模式（服务后台运行，托盘不可用时自动回退普通模式）")
     return parser.parse_args()
 
 
@@ -245,6 +247,8 @@ def serve(ctx: dict) -> int:
         server.shutdown()
         _remove_pid()
 
+    ctx["shutdown"] = shutdown  # 供托盘等外部宿主触发优雅停机
+
     def on_signal(_signum, _frame) -> None:
         threading.Thread(target=shutdown, name="lm-shutdown", daemon=True).start()
 
@@ -275,6 +279,13 @@ def main() -> int:
     ctx = build_context(args)
     if args.dry_run_test:
         return asyncio.run(run_dry_run_test(ctx, args.dry_run_count))
+    if args.tray:
+        from tray_app import TrayUnavailable, run_tray
+
+        try:
+            return run_tray(ctx, serve)
+        except TrayUnavailable as exc:
+            LOG.warning("托盘不可用（%s），回退普通服务模式", exc)
     return serve(ctx)
 
 

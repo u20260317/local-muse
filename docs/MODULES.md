@@ -21,6 +21,9 @@
 | api_pool.py | 选源/限流/熔断/请求构造 | `ApiPool.pick/acquire/release/report_429/call_text/build_generation_request/snapshot` | core.logger、requests（线程内） | Key 不许进日志；HTTP 不许在主循环同步执行 |
 | image_gen.py | 文生图调度 | `generate(services, task_id, prompt, dry_run, reference_image, on_pid)` | sandbox_wrapper、pool | 不许 import vault；无源必须走模拟并标注 |
 | video_gen.py | 文生/图生视频调度 | `generate(...)`（复用 image_gen._run_generation） | image_gen | 不要另写一套选源逻辑 |
+| compose.py | 成片合成（ffmpeg） | `compose(scenes, out_path, cfg)`、`find_ffmpeg()` | core.logger、ffmpeg/imageio-ffmpeg | 失败必须抛 RuntimeError 由阶段降级；时间槽公式（转场重叠）不许乱改，见 docs/COMPOSE.md |
+| tts.py | 配音合成 | `synthesize_scene(narration, out_path, voice)`、`audio_duration(path)` | edge-tts、ffprobe | 失败只返回 None 不许抛；不许把旁白文本写进日志以外的地方 |
+| tray_app.py（根目录） | 系统托盘宿主 | `run_tray(ctx, serve)`、`describe_menu()` | pystray、Pillow、core.paths | 托盘不可用必须抛 TrayUnavailable 让 main 回退；不许在托盘线程里直接调 scheduler |
 | media_worker.py | 生成子进程入口 | stdin JSON → stdout `LM_RESULT_JSON:` | downloader | 只回一行结果；其余输出去 stderr |
 | downloader.py | 下载与校验 | `fetch/save_bytes/save_base64/verify/make_simulated_asset` | 标准库 | 必须 .part 原子改名 + 魔数校验；模拟产物必须明示 |
 

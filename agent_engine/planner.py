@@ -42,16 +42,42 @@ def _template_plan(spec, skill: dict, history: list[dict],
         f"【技能要点】{body[:400]}\n"
         f"【输出】一段可直接用于文生图与文生视频的中文画面描述，不要包含任何账号或凭证信息"
     )
+    # 模板分镜：景别交替（远景→中景→特写→收束），首镜即封面镜（主体突出）
+    shots = ["远景全貌，交代环境与氛围，主体突出、上方留标题区",
+             "中景主体，构图居中留白",
+             "特写细节，质感与光影",
+             "氛围收束，余韵悠长"]
+    lines = [topic[:28], "换个角度，看看这一幕的细节",
+             "光影之间，自有答案", "把这一幕，留给今天的你"]
+    scenes = [{"image_prompt": f"{style}；{shot}；主题：{topic}",
+               "narration": line} for shot, line in zip(shots, lines)]
     return {
         "prompt": prompt,
         "style": style,
         "topic": topic,
-        "steps": ["browser", "image", "video", "reflect"],
+        "scenes": scenes,
+        "steps": ["browser", "image", "video", "compose", "reflect"],
         "needs_browser": "research" in skill.get("name", ""),
         "reference_image": None,
         "source": "template",
         "provider": "",
     }
+
+
+def _sanitize_scenes(plan: dict) -> list[dict]:
+    """校验模型给出的分镜：最多 6 镜，字段强制成字符串并截断，缺画面词回退总提示词。"""
+    raw = plan.get("scenes")
+    scenes: list[dict] = []
+    if isinstance(raw, list):
+        for item in raw[:6]:
+            if not isinstance(item, dict):
+                continue
+            scenes.append({
+                "image_prompt": str(item.get("image_prompt")
+                                    or plan.get("prompt", ""))[:600],
+                "narration": str(item.get("narration") or "")[:80],
+            })
+    return scenes
 
 
 def _extract_json(text: str) -> dict | None:
@@ -113,7 +139,10 @@ async def build_plan(services: dict, spec) -> dict:
             messages = [
                 {"role": "system", "content": "你是短视频策划 Agent。只输出 JSON："
                  "{\"prompt\":...,\"style\":...,\"topic\":...,\"steps\":[...],"
-                 "\"needs_browser\":false,\"reference_image\":null}。"
+                 "\"needs_browser\":false,\"reference_image\":null,"
+                 "\"scenes\":[{\"image_prompt\":...,\"narration\":...}]}。"
+                 "scenes 为 3-6 个分镜：首镜是封面镜（主体突出、上方留标题区），"
+                 "景别要有交替（远景/中景/特写），每镜 narration 一句口播旁白（不超过 28 字）。"
                  "禁止输出任何凭证、Cookie 或密钥。"},
                 {"role": "user", "content":
                     f"选题：{spec.instruction}\n技能：{skill.get('title')}\n"
@@ -128,6 +157,9 @@ async def build_plan(services: dict, spec) -> dict:
                 if parsed and parsed.get("prompt"):
                     plan = _template_plan(spec, skill, history, memory_lines)
                     plan.update({k: v for k, v in parsed.items() if v is not None})
+                    cleaned = _sanitize_scenes(plan)
+                    if cleaned:
+                        plan["scenes"] = cleaned
                     plan["source"] = "llm"
                     plan["provider"] = provider
                     LOG.info("task=%s 使用文本模型 %s 生成计划", spec.task_id, provider)

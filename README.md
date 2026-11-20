@@ -28,6 +28,8 @@
 | 🌐 **Browserr 浏览器** | Servo 引擎替代 Chromium：项目内独立二进制（sha256 校验安装）、每任务独立 profile 与子进程 |
 | 🔌 **API 只用本地** | 唯一启用源是本机 zen-gate（OpenAI 兼容）；priority 选源 + 令牌桶限速 + 429 冷却熔断 |
 | 🔐 **凭证保险库 Vault** | Fernet 加密落盘；只有决策引擎能签发会话级临时凭证，任务结束立即销毁 |
+| 🎬 **成片合成（v1.2）** | 分镜出图 + ffmpeg 运镜/转场 + 字幕烧录 + 逐镜配音，产出可直接发布的竖屏成片（[合成说明](docs/COMPOSE.md)） |
+| 🖥️ **系统托盘（v1.2）** | `--tray` 托盘常驻：打开控制台 / 看状态 / 复制地址 / 重启 / 退出，无桌面环境自动回退 |
 | 🧩 **全程模块化** | 22 个模块统一「【核心模块】」中文横幅标注，职责/接口/禁区全在 [模块地图](docs/MODULES.md)，拆改像搭积木 |
 | 📚 **手把手文档** | 设计、决策引擎、部署、AI 维护四件套，任何人或 AI 都能 30 分钟上手维护迭代 |
 | 💻 **老硬件友好** | 为 ThinkPad L430 级别机器设计：子进程隔离、内存门禁、模拟产物明确标注不造假 |
@@ -40,7 +42,7 @@
                                           ├─ media_generator/ 生成线：API 池选源限流 · 子进程请求/下载/校验
                                           ├─ browser_agent/  浏览器线：Browserr 唯一启动点 · 子进程隔离 · Vault
                                           └─ core/           基础层：配置 · SQLite · 硬件采样 · 日志脱敏 · 数据契约
-一条任务：plan → browser(可选) → image → video → upload(可选) → persist → reflect
+一条任务：plan → browser(可选) → image → video(可选) → compose(合成成片) → upload(可选) → persist → reflect
 ```
 
 ## 快速开始
@@ -81,7 +83,8 @@ export ZEN_GATE_API_KEY=<zen-gate mainKey>
 
 | 版本 | 内容 | 入口 |
 |---|---|---|
-| **agent-loop-v1.1.0**（当前主线） | 阶段插件化 + 目标续行 + Token 计量/压缩 + SQLite 长期记忆 + 面板智能状态卡 | [Release](https://github.com/u20260317/local-muse/releases/tag/agent-loop-v1.1.0) |
+| **v1.2.0**（当前主线） | 成片合成（ffmpeg 运镜/转场/字幕/配音）+ 分镜计划 + 系统托盘 + 万相图/视频接线，详见 [CHANGELOG](CHANGELOG.md) | [Release](https://github.com/u20260317/local-muse/releases/tag/v1.2.0) |
+| agent-loop-v1.1.0 | 阶段插件化 + 目标续行 + Token 计量/压缩 + SQLite 长期记忆 + 面板智能状态卡 | [Release](https://github.com/u20260317/local-muse/releases/tag/agent-loop-v1.1.0) |
 | browserr-zengate-v1.0.0 | Browserr（Servo）+ 本地 zen-gate + 全模块化文档 | [Release](https://github.com/u20260317/local-muse/releases/tag/browserr-zengate-v1.0.0) |
 | original-chromium-v1.0.0（存档） | 最初的 Chromium / Playwright + 远程源聚合版，仅存档对照 | [Release](https://github.com/u20260317/local-muse/releases/tag/original-chromium-v1.0.0) |
 

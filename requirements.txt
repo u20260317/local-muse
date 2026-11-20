@@ -3,6 +3,8 @@
 flask>=3.0,<4
 requests>=2.31,<3
 schedule>=1.2,<2
+edge-tts>=7              # 成片配音（微软在线 TTS，免费免 Key；不可用时自动降级无配音）
+imageio-ffmpeg>=0.5      # 自带 ffmpeg 二进制：系统没装 ffmpeg 时 compose 合成靠它
 
 # 浏览器：Browserr 的 Python SDK（driver.py）是纯标准库，随官方 release
 # 下载到项目内 browserr_bin/，不需要 pip 依赖，也不再需要 Playwright/Chromium。
@@ -12,3 +14,5 @@ cryptography>=42,<46
 
 # 以下为可选增强，缺失时程序自动降级到标准库实现，不必安装：
 # psutil>=5.9         # 若安装则用于更精确的 CPU/内存采样
+# pystray>=0.19       # 系统托盘（--tray）所需；缺失时自动回退普通服务模式
+# Pillow>=10          # 系统托盘图标绘制；同上

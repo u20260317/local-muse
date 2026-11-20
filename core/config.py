@@ -50,6 +50,12 @@ DEFAULT_CONFIG: dict = {
         "extra_args": [],
     },
     "upload": {"enabled": False, "repo": "", "target": ""},
+    # v1.2 成片合成（见 docs/COMPOSE.md）：分镜→运镜/转场/字幕/配音/BGM 的 ffmpeg 参数
+    "compose": {
+        "enabled": True, "width": 1080, "height": 1920, "fps": 30,
+        "scene_seconds": 4.0, "transition_seconds": 0.5,
+        "voice_enabled": True, "voice": "zh-CN-XiaoxiaoNeural", "bgm_path": "",
+    },
     # v1.1 Agent Loop 相关配置（见 docs/PLUGIN_GUIDE.md / docs/MEMORY_MODULE.md）
     "pipeline": {"disabled": [], "order": []},
     "planner": {"history_token_budget": 600, "conversation_token_budget": 400},
