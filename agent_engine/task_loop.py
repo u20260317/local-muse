@@ -3,6 +3,12 @@
 plan → 浏览器采集(可选) → 文生图 → 文生视频/图生视频 → 上传(可选) → 落库 → 独立复盘
 业务 I/O 全部在独立子进程中完成；重试与超时由 Scheduler 统一负责。
 """
+
+# ============================================================
+# 【核心模块】决策引擎 · 单任务流水线编排
+# 作用：串起 plan→browser→image→video→upload→persist→reflect 七阶段；凭证只在本任务内签发、结束即销毁
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import time
@@ -60,7 +66,7 @@ async def execute(runtime, services: dict) -> dict:
         result["stages"].append("plan")
         runtime.provider = plan.get("provider", "")
 
-        # 2) 浏览器采集：独立 Chromium 子进程 + 会话级临时凭证（仅注入隔离实例）
+        # 2) 浏览器采集：独立 Browserr 子进程 + 会话级临时凭证（仅注入隔离实例）
         if plan.get("needs_browser") and browser_cfg.get("enabled", True):
             if spec.dry_run:
                 credential = {"session_id": "dry-run", "cookies": [], "headers": {}, "storage": {}}
@@ -69,7 +75,7 @@ async def execute(runtime, services: dict) -> dict:
                 credential = services["vault"].issue_session_credential(
                     task_id, cards, services["engine_token"])
                 credential_issued = True
-            _report(services, runtime, "browser", 25, "启动独立 Playwright Chromium 子进程")
+            _report(services, runtime, "browser", 25, "启动独立 Browserr 子进程")
             browser_payload = {
                 "task_id": task_id,
                 "dry_run": spec.dry_run,

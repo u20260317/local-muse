@@ -15,19 +15,19 @@
 | 边界 | 说明 |
 | --- | --- |
 | 不使用 Docker / 容器 | 隔离靠 `subprocess` 子进程、超时、进程树清理与独立目录，属于**轻量沙盒**，不是强安全边界 |
-| 不接管系统浏览器 | 只使用安装到项目内 `browser_bin/` 的 Playwright 自带独立 Chromium 二进制 + `browser_profile/session_<task_id>/` |
+| 不接管系统浏览器 | 只使用安装到项目内 `browserr_bin/` 的 Browserr（Servo）引擎 二进制 + `browser_profile/session_<task_id>/` |
 | 不硬编码密钥 | 所有 API Key 只在 `config.json`；vault 凭证只在 `vault/`；日志与面板脱敏 |
-| 不硬编码绝对路径 | 全部路径相对项目根表达，由 `core/paths.py` 基于 `__file__` 动态解析；脚本按自身位置定位项目根；`PLAYWRIGHT_BROWSERS_PATH` 安装时用相对路径 `browser_bin`，运行时由 `setup_playwright_env()` 注入解析结果，Windows / Linux 通用 |
+| 不硬编码绝对路径 | 全部路径相对项目根表达，由 `core/paths.py` 基于 `__file__` 动态解析；脚本按自身位置定位项目根；`BROWSERR_HOME` 安装时用相对路径 `browserr_bin`，运行时由 `setup_browserr_env()` 注入解析结果，Windows / Linux 通用 |
 | 不公网暴露 | Flask 只绑定 `127.0.0.1`，非回环配置被强制改写 |
 | 不承诺真实生成效果 | 无 Key 或显式 `dry_run` 时产出明确标注的模拟产物，不伪造视频 |
-| Windows 内存上限 | 无 `RLIMIT_AS`，靠全局并发上限 + 硬件阈值降级 + Chromium 启动参数控制 |
+| Windows 内存上限 | 无 `RLIMIT_AS`，靠全局并发上限 + 硬件阈值降级 + Browserr 启动参数控制 |
 | 免费额度 | 各家政策随时变化，以官方最新公告为准；代码只提供可配置适配器 |
 
 ## 3. 总体架构
 
 ```mermaid
 flowchart TB
-    SCRIPTS["scripts/ 一键脚本 (.bat/.sh/.ps1)"] --> SETUP["setup / install_chromium"]
+    SCRIPTS["scripts/ 一键脚本 (.bat/.sh/.ps1)"] --> SETUP["setup / install_browserr"]
     SCRIPTS --> MAIN["start → main.py"]
     SCRIPTS --> OPS["dry_run_test / reset_browser / stop"]
     MAIN --> FLASK["Flask 面板线程 (127.0.0.1)"]
@@ -43,7 +43,7 @@ flowchart TB
     RT --> MW["media_worker 独立子进程"]
     VAULT["Vault 加密凭证保险库"] --> PLAN
     PLAN -. 会话级临时凭证经 stdin .-> BW
-    BW --> CHROME["Playwright 内置独立 Chromium（browser_bin/ 二进制 + session_<task_id> 用户数据）"]
+    BW --> CHROME["Browserr（Servo）引擎（browserr_bin/ 二进制 + session_<task_id> 用户数据）"]
     MW --> POOL["api_pool 单服务商信号量 + 令牌桶 + 429 冷却"] --> API["公网免费额度 API"]
     CHROME --> OUT["output/<task_id>/ + db/task.db"]
     POOL --> OUT
@@ -77,16 +77,16 @@ flowchart TB
 - `task_loop.py`：单任务流水线编排与阶段进度上报。
 - `core/`：配置热更新、SQLite WAL、带 task_id 的脱敏日志、硬件采样，四大板块单向依赖它。
 
-### 4.2 板块 2 独立 Chromium + vault（`browser_agent/`）
+### 4.2 板块 2 独立 Browserr + vault（`browser_agent/`）
 
 - `vault.py`：独立凭证容器、受限权限、可选落盘加密、`engine_token` 鉴权、会话级临时凭证签发与销毁。
-- `browser_runner.py`：**全项目唯一启动浏览器的位置**，`launch_persistent_context(user_data_dir=...)`。
+- `browser_runner.py`：**全项目唯一启动浏览器的位置**，`Driver(profile_dir=...)`。
 - `sandbox_wrapper.py`：子进程隔离、stdin 传参、超时强杀进程树、退出码分类。
 - `browser_worker.py`：子进程 CLI，凭证只注入隔离上下文，不落盘不记日志。
 
 ### 4.3 板块 3 图文视频 API 池（`media_generator/`）
 
-- `api_pool.py`：按 `priority` 严格优先（`openrouter_free` 首选）+ 同档加权轮询、`Semaphore` 单源并发、令牌桶限速、429 冷却、消耗日志、请求构造。
+- `api_pool.py`：按 `priority` 严格优先（`zen_gate_local` 为唯一启用源）+ 同档加权轮询、`Semaphore` 单源并发、令牌桶限速、429 冷却、消耗日志、请求构造。
 - `image_gen.py` / `video_gen.py`：主进程选源与配额，子进程执行 HTTP / 下载 / 校验；支持参考图 data URL。
 - `downloader.py`：流式 `.part` 原子落盘、魔数与大小校验、模拟产物生成。
 - `media_worker.py`：生成子进程 CLI，兼容 URL / base64 / 异步任务轮询三种返回形态。
@@ -168,7 +168,7 @@ QUEUED ──派发──> RUNNING ──成功──> SUCCEEDED
 1. 定时触发 / 面板提交 → `TaskSpec` → 优先级队列（DB 记 `QUEUED`）。
 2. 调度主循环派发 → `TaskRuntime`（DB 记 `RUNNING`）。
 3. `planner.build_plan`：Skill 正文 + `prompt_history` + 可选文本模型 → `plan`。
-4. 需要网页时：决策引擎向 vault 申请临时凭证 → stdin → 浏览器子进程 → 隔离 Chromium → `materials`。
+4. 需要网页时：决策引擎向 vault 申请临时凭证 → stdin → 浏览器子进程 → 隔离 Browserr → `materials`。
 5. `plan.prompt` → `api_pool` 选源 / 配额 → 生成子进程 → HTTP → URL/base64/异步任务 → 下载校验 → `output/<task_id>/`。
 6. 结果写 `tasks.result_json`；`planner.reflect` 写 `prompt_history`；日志带 task_id 进内存环形缓冲与文件。
 7. 面板轮询 `/api/status`、`/api/tasks`、`/api/logs` 读内存快照与 SQLite。
@@ -177,7 +177,7 @@ QUEUED ──派发──> RUNNING ──成功──> SUCCEEDED
 
 | 对象 | 隔离手段 | 位置 |
 | --- | --- | --- |
-| Chromium 二进制 | 仅 `playwright install chromium` 自带；安装时 `PLAYWRIGHT_BROWSERS_PATH=browser_bin` | 项目内 `browser_bin/`（不入库） |
+| Browserr 二进制 | 仅 `scripts/install_browserr.* 下载 Browserr 官方 release` 自带；安装时 `BROWSERR_HOME=browserr_bin` | 项目内 `browserr_bin/`（不入库） |
 | Cookie / 缓存 / localStorage | 每任务独立 `user_data_dir` | `browser_profile/session_<task_id>/` |
 | 登录凭证 | 独立容器 + 受限权限 + 可选加密 + 会话级临时句柄 | `vault/` |
 | API Key | 只在 `config.json`，进程内读取，stdin 传子进程 | 不进日志 / 不进面板响应 |
@@ -191,19 +191,19 @@ QUEUED ──派发──> RUNNING ──成功──> SUCCEEDED
 2. 禁止 `channel`、`executable_path`、`connect_over_cdp` 等指向或连接系统浏览器的用法。
 3. `media_generator` 全链路不得 import vault、不得读取原始凭证。
 4. 面板只监听 `127.0.0.1`；`use_reloader=False`。
-5. 依赖仅 `flask`、`playwright`、`requests`、`schedule`（`psutil` / `cryptography` 可选增强，缺失自动降级）。
+5. 依赖仅 `flask`、`browserr`、`requests`、`schedule`（`psutil` / `cryptography` 可选增强，缺失自动降级）。
 6. 失败自动重试 2 次、超时强杀、单任务失败不影响其他任务。
 7. 所有 API 密钥统一 `config.json`，代码零硬编码。
 8. Web 面板是唯一交互入口，不做 GUI 桌面程序。
 9. 复盘按 task_id 独立执行。
-10. `scripts/` 与 `docs/` 入库；`browser_bin/`、`vault/`、`browser_profile/`、`output/`、`logs/`、`db/*.db`、`.venv/` 不入库。
+10. `scripts/` 与 `docs/` 入库；`browserr_bin/`、`vault/`、`browser_profile/`、`output/`、`logs/`、`db/*.db`、`.venv/` 不入库。
 11. 全项目零硬编码绝对路径：路径一律相对项目根表达，由 `core/paths.py` 基于 `__file__` 动态解析；
-    安装脚本只写相对路径 `PLAYWRIGHT_BROWSERS_PATH=browser_bin`，运行时由 `setup_playwright_env()` 注入解析结果。
+    安装脚本只写相对路径 `BROWSERR_HOME=browserr_bin`，运行时由 `setup_browserr_env()` 注入解析结果。
 
 ## 10. 脚本层定位
 
 `scripts/` 是外围入口层，只做环境准备、启动、自检、运维，**不参与运行时架构**：
-`setup` 准备 venv 与项目内 `browser_bin/` 的独立 Chromium；`start` 调 `main.py`；`dry_run_test` 调 `--dry-run-test`；
+`setup` 准备 venv 与项目内 `browserr_bin/` 的独立 Browserr；`start` 调 `main.py`；`dry_run_test` 调 `--dry-run-test`；
 `reset_browser` 操作项目内会话目录；`stop` 校验 PID 命令行后停止服务。
 Windows 用 `.bat` / `.ps1`，Linux / macOS 用 `.sh`，全部按脚本自身位置 `cd` 到项目根，无任何盘符路径。
 
@@ -211,6 +211,6 @@ Windows 用 `.bat` / `.ps1`，Linux / macOS 用 `.sh`，全部按脚本自身位
 
 - 入队 / 出队 O(log n)，分发 O(1)；SQLite 开 WAL + 短事务，面板读内存快照不压库。
 - 日志内存环形缓冲上限 2000 条；WARNING 以上才写 DB 索引，避免高频写放大。
-- 主要瓶颈是 Chromium 内存与视频长轮询，用默认并发 2、独立超时、取消句柄缓解。
+- 主要瓶颈是 Browserr 内存与视频长轮询，用默认并发 2、独立超时、取消句柄缓解。
 - 配置原子写（`*.tmp` + `os.replace`）并热更新；外部调用全部强制超时。
 - 退出时取消全部子任务、清理子进程树、删除 PID 文件。

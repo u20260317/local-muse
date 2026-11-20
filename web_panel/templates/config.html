@@ -33,7 +33,7 @@
     </section>
 
     <section class="glass">
-      <div class="section-head"><h2>独立 Chromium 浏览器</h2><span class="hint">仅 Playwright 内置二进制</span></div>
+      <div class="section-head"><h2>独立 Browserr 浏览器</h2><span class="hint">仅 Browserr 内置二进制</span></div>
       <div class="form-grid">
         <label class="check"><input name="browser_enabled" type="checkbox" {{ 'checked' if config.browser.enabled }}> 启用浏览器自动化</label>
         <label class="check"><input name="headless" type="checkbox" {{ 'checked' if config.browser.headless }}> 无头模式（取消勾选为有头）</label>
@@ -92,6 +92,6 @@
       <tbody id="vault-body"><tr><td colspan="6" class="muted">加载中…</td></tr></tbody>
     </table>
   </div>
-  <div class="callout">凭证经 stdin 注入隔离 Chromium 子进程，按 task_id 会话隔离，任务结束立即销毁；不会混入绘画 / 视频 prompt。</div>
+  <div class="callout">凭证经 stdin 注入隔离 Browserr 子进程，按 task_id 会话隔离，任务结束立即销毁；不会混入绘画 / 视频 prompt。</div>
 </section>
 {% endblock %}

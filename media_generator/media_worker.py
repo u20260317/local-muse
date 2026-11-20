@@ -4,6 +4,12 @@ stdin：一次性的请求描述（含 API Key，仅内存传递，不落盘、�
 stdout：仅一行 LM_RESULT_JSON:{...}
 职责：发 HTTP 请求 → 解析 URL/base64/异步任务 → 下载 → 完整性校验。
 """
+
+# ============================================================
+# 【核心模块】生成执行体 · 子进程
+# 作用：stdin 收请求（含 Key 仅内存）→ 发请求/轮询异步任务 → 下载 → 校验，stdout 只回一行 LM_RESULT_JSON
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import contextlib

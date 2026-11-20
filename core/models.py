@@ -2,6 +2,12 @@
 
 所有模块只依赖这里的 dataclass / Enum，避免接口签名漂移。
 """
+
+# ============================================================
+# 【核心模块】基础层 · 跨模块数据契约
+# 作用：TaskSpec/TaskRuntime/TaskStatus/TaskPriority/ProviderConfig 唯一定义处，其它模块只依赖这里，避免签名漂移
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import enum

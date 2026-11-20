@@ -1,9 +1,11 @@
 # Local-Muse 必需依赖（尽量精简，适配 ThinkPad L430）
 # 安装：pip install -r requirements.txt
 flask>=3.0,<4
-playwright>=1.44,<2
 requests>=2.31,<3
 schedule>=1.2,<2
+
+# 浏览器：Browserr 的 Python SDK（driver.py）是纯标准库，随官方 release
+# 下载到项目内 browserr_bin/，不需要 pip 依赖，也不再需要 Playwright/Chromium。
 
 # 凭证保险库（vault）强制加密落盘，此依赖为必需，不再降级为明文
 cryptography>=42,<46

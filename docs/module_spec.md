@@ -46,12 +46,12 @@ class TaskStatus(str, Enum):
 
 | 函数 / 常量 | 入参 | 返回 | 说明 |
 | --- | --- | --- | --- |
-| `ROOT` / `DIRS` / `DB_PATH` / `CONFIG_PATH` / `LOG_PATH` / `PID_PATH` | — | `Path` | 由 `__file__` 动态解析，全部指向项目内目录，绝不指向系统浏览器；`DIRS["browser_bin"]` 是项目内 Chromium 二进制目录 |
-| `ensure_dirs()` | — | `None` | 幂等创建全部运行期目录（含 `browser_bin/`） |
-| `setup_playwright_env()` | — | `Path` | 在**任何** `import playwright` 之前把 `PLAYWRIGHT_BROWSERS_PATH` 指向项目内 `browser_bin/`；主进程、自检与浏览器子进程均调用，路径动态解析、跨平台 |
+| `ROOT` / `DIRS` / `DB_PATH` / `CONFIG_PATH` / `LOG_PATH` / `PID_PATH` | — | `Path` | 由 `__file__` 动态解析，全部指向项目内目录，绝不指向系统浏览器；`DIRS["browserr_bin"]` 是项目内 Browserr 二进制目录 |
+| `ensure_dirs()` | — | `None` | 幂等创建全部运行期目录（含 `browserr_bin/`） |
+| `setup_browserr_env()` | — | `Path` | 在**任何** `import browserr` 之前把 `BROWSERR_HOME` 指向项目内 `browserr_bin/`；主进程、自检与浏览器子进程均调用，路径动态解析、跨平台 |
 | `rel(path)` | `Path` | `str` | 把项目内路径显示为相对项目根的 `/` 分隔形式，用于日志与自检输出 |
 | `safe_id(task_id)` | `str` | `str` | 收敛为文件名安全字符，防路径穿越 |
-| `session_dir(task_id)` | `str` | `Path` | `browser_profile/session_<safe_id>/`，独立 Chromium 用户数据 |
+| `session_dir(task_id)` | `str` | `Path` | `browser_profile/session_<safe_id>/`，独立 Browserr 用户数据 |
 | `output_dir(task_id)` | `str` | `Path` | `output/<safe_id>/` |
 | `list_sessions()` | — | `list[dict]` | `{name, task_id, path, size_mb}`，`path` 为相对项目根的形式 |
 | `reset_browser_env()` | — | `int` | 删除 `session_*` 目录数，保留根目录 |
@@ -240,9 +240,9 @@ user_data_dir, extra_args, credentials, actions[]}`。
 `actions[].type` 支持 `goto / fill / click / extract / screenshot / wait`。
 返回 `{ok, simulated, session, materials[], screenshots[], error?}`。
 
-**隔离铁则**：二进制只来自项目内 `browser_bin/`（由 `paths.setup_playwright_env()` 在任何
-`import playwright` 之前注入 `PLAYWRIGHT_BROWSERS_PATH`）；只调用
-`playwright.chromium.launch_persistent_context(user_data_dir=...)`；
+**隔离铁则**：二进制只来自项目内 `browserr_bin/`（由 `paths.setup_browserr_env()` 在任何
+`import browserr` 之前注入 `BROWSERR_HOME`）；只调用
+`Driver(profile_dir=browser_profile/session_<task_id>)`；
 不指定系统浏览器通道、不指定外部可执行路径、不连接已有浏览器进程。
 
 ### `browser_agent/browser_worker.py`
@@ -359,7 +359,7 @@ active_snapshot() / queue_snapshot() / snapshot() / degraded()
 | `/api/skills/<name>` | GET / POST / DELETE | `{content}` | 技能详情 / 保存 / 删除 |
 | `/api/sources` | GET | — | 源状态 + 消耗日志 |
 | `/api/sources/<name>` | POST | `{enabled, weight, priority, rpm, max_concurrency, api_key?}` | 更新后的源列表 |
-| `/api/sessions` | GET | — | Chromium 会话 + vault 会话 |
+| `/api/sessions` | GET | — | Browserr 会话 + vault 会话 |
 | `/api/sessions/reset` | POST | — | 有活跃任务时返回 409 |
 | `/api/outputs` | GET | — | 最近 60 个产物（含预览 URL） |
 | `/output/<task_id>/<filename>` | GET | — | 本地文件，`safe_id` + `secure_filename` 防穿越 |
@@ -395,7 +395,7 @@ python main.py [--setup-check] [--dry-run-test] [--dry-run-count N]
 
 | 参数 | 说明 |
 | --- | --- |
-| `--setup-check` | 只读环境检查（依赖、目录、配置、DB、独立 Chromium），返回退出码 0/1 |
+| `--setup-check` | 只读环境检查（依赖、目录、配置、DB、独立 Browserr），返回退出码 0/1 |
 | `--dry-run-test` | 提交 N 条并行自检任务，等待完成并打印每个 task_id 状态，不启动面板 |
 | `--host` | 非回环地址强制改写为 `127.0.0.1` |
 | `--port` | 默认取 `config.server.port` |

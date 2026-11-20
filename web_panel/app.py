@@ -3,6 +3,12 @@
 仅由 main.py 在 127.0.0.1 上启动，use_reloader=False，不开放外网。
 所有敏感配置只返回脱敏视图；vault 凭证永不出现在任何响应正文。
 """
+
+# ============================================================
+# 【核心模块】面板层 · Flask 控制面板
+# 作用：仅监听 127.0.0.1；对话工作台/看板/配置/Skill/API 源/日志页面与 JSON 接口；敏感信息只回脱敏视图
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import time
@@ -366,7 +372,7 @@ def create_app(ctx: dict) -> Flask:
 
     @app.get("/api/sessions")
     def api_sessions():
-        return jsonify({"ok": True, "chromium": paths.list_sessions(),
+        return jsonify({"ok": True, "chromium": paths.list_sessions(), "browserr": paths.list_sessions(),
                         "vault": vault.sessions_snapshot()})
 
     @app.post("/api/sessions/reset")

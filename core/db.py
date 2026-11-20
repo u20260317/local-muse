@@ -3,6 +3,12 @@
 每条任务独占一行主记录，另有 prompt 历史、API 消耗、日志索引三张附属表；
 一个任务写失败不会影响其他并发任务。
 """
+
+# ============================================================
+# 【核心模块】基础层 · SQLite 数据层
+# 作用：WAL + 短事务；tasks/prompt_history/api_usage/log_index/conversations/messages 六表，按 task_id 隔离
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import json

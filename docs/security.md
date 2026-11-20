@@ -4,7 +4,7 @@
 
 | 保护对象 | 主要威胁 | 防护手段 |
 | --- | --- | --- |
-| 用户日常浏览器账号 / Cookie / 历史 | Agent 误接管系统浏览器、读取本机配置 | 只用 Playwright 内置独立 Chromium + 项目内独立用户数据目录 |
+| 用户日常浏览器账号 / Cookie / 历史 | Agent 误接管系统浏览器、读取本机配置 | 只用 Browserr（Servo）引擎 + 项目内独立用户数据目录 |
 | vault 登录凭证 | 被生成模块读取、混入 prompt、外泄到免费 API | 模块解耦 + engine_token 鉴权 + 会话隔离 + stdin 注入 |
 | API Key | 硬编码、日志泄露、面板回显、进程列表泄露 | 仅 `config.json`；脱敏视图；stdin 传参；日志过滤器 |
 | 本机可用性（L430） | 多任务并发打满 CPU/内存、请求风暴被封 | 全局并发上限、单源配额、令牌桶、硬件降级、超时强杀 |
@@ -69,23 +69,23 @@ issue_session_credential(task_id, card_names, engine_token, ttl_s)
 
 | 规则 | 实现 |
 | --- | --- |
-| 二进制隔离 | 只使用 `playwright install chromium` 下载到项目内 `browser_bin/` 的独立 Chromium（不写用户全局 Playwright 缓存，不碰系统浏览器） |
-| 路径隔离 | 安装脚本用相对项目根的 `PLAYWRIGHT_BROWSERS_PATH=browser_bin`；运行时由 `core/paths.py::setup_playwright_env()` 在 import Playwright 前注入由 `__file__` 解析的目录，不含硬编码绝对路径 |
-| 配置隔离 | `launch_persistent_context(user_data_dir=browser_profile/session_<task_id>)` |
+| 二进制隔离 | 只使用 `scripts/install_browserr.* 下载 Browserr 官方 release` 下载到项目内 `browserr_bin/` 的独立 Browserr（不写用户全局 Browserr 缓存，不碰系统浏览器） |
+| 路径隔离 | 安装脚本用相对项目根的 `BROWSERR_HOME=browserr_bin`；运行时由 `core/paths.py::setup_browserr_env()` 在 import Browserr 前注入由 `__file__` 解析的目录，不含硬编码绝对路径 |
+| 配置隔离 | `Driver(profile_dir=browser_profile/session_<task_id>)` |
 | 会话隔离 | 每条任务独立目录，Cookie / 缓存 / localStorage 天然不共享 |
 | 明确禁止 | 不指定系统浏览器通道、不指定外部可执行路径、不连接已有浏览器进程、不读取系统浏览器用户目录 |
 | 重置边界 | 面板「一键重置」与 `reset_browser.*` 只删项目内 `session_*`，且需二次确认 / 无活跃任务 |
-| 有头模式 | 有头 Chromium 仍是独立实例与独立配置目录，不共享本机浏览器数据 |
+| 有头模式 | 有头 Browserr 仍是独立实例与独立配置目录，不共享本机浏览器数据 |
 
 `browser_agent/browser_runner.py` 是**全项目唯一**启动浏览器的位置，便于审计与静态检查。
 
 ## 4. 进程隔离与超时
 
-- 每条浏览器任务、每次生成调用都启动独立 Python 子进程；主进程不直接执行 Playwright 或下载逻辑。
+- 每条浏览器任务、每次生成调用都启动独立 Python 子进程；主进程不直接执行 Browserr 或下载逻辑。
 - 子进程创建参数：Windows `CREATE_NEW_PROCESS_GROUP`，POSIX `start_new_session=True`；
   超时用 `taskkill /T /F` 或 `killpg` 杀整棵进程树。
 - Linux 子进程内 `apply_worker_memory_limit()` 设置 `RLIMIT_AS`；
-  **Windows 无等价强隔离**，靠全局并发上限 + 硬件阈值降级 + Chromium 参数控制，文档如实标注。
+  **Windows 无等价强隔离**，靠全局并发上限 + 硬件阈值降级 + Browserr 参数控制，文档如实标注。
 - 子进程崩溃、非零退出、stdout 无结果都返回结构化错误，单任务失败不拖垮主程序。
 - 退出时 `Scheduler.stop()` 取消全部 `asyncio.Task` 并清理所有已登记 PID。
 
@@ -126,8 +126,8 @@ issue_session_credential(task_id, card_names, engine_token, ttl_s)
 - 不做端口映射 / 内网穿透；面板不提供任何「对外分享」入口。
 - `stop.*` 读取 `logs/local_muse.pid` 后**先校验进程命令行含 `main.py`**，不匹配则拒绝终止，避免 PID 复用误杀。
 - `reset_browser.*` 二次确认；面板接口在有活跃任务时返回 409 拒绝重置。
-- 脚本内零密钥、零绝对路径、零容器；只调用项目内 `main.py` 与 pip/playwright 安装命令。
-- 安装脚本用相对项目根 `PLAYWRIGHT_BROWSERS_PATH=browser_bin` 把 Chromium 固定到项目内；
+- 脚本内零密钥、零绝对路径、零容器；只调用项目内 `main.py` 与 pip/browserr 安装命令。
+- 安装脚本用相对项目根 `BROWSERR_HOME=browserr_bin` 把 Browserr 固定到项目内；
   脚本一律先 `cd "$(dirname ...)/.."` 或 `cd /d "%~dp0.."` 定位项目根，不写盘符路径，
   因此把项目整体拷到 Linux 后无需改任何路径。
 - 配置保存走原子写与字段白名单；`server.host` 非法值被强制修正。
@@ -151,6 +151,6 @@ issue_session_credential(task_id, card_names, engine_token, ttl_s)
 - [ ] 日志与面板响应中无密钥正文（脱敏过滤器生效）
 - [ ] Flask 监听地址为 `127.0.0.1`，未做端口映射
 - [ ] `browser_profile/` 下只有 `session_*` 目录，无系统浏览器路径
-- [ ] Chromium 二进制位于项目内 `browser_bin/`，未被用户全局 Playwright 缓存接管
-- [ ] 搜索全部 `.py` / `.bat` / `.sh` / `.ps1`，无任何平台相关绝对路径；`PLAYWRIGHT_BROWSERS_PATH` 安装用相对路径、运行时动态解析
+- [ ] Browserr 二进制位于项目内 `browserr_bin/`，未被用户全局 Browserr 缓存接管
+- [ ] 搜索全部 `.py` / `.bat` / `.sh` / `.ps1`，无任何平台相关绝对路径；`BROWSERR_HOME` 安装用相对路径、运行时动态解析
 - [ ] 退出后 `vault` 会话计数为 0、无残留 Python 子进程

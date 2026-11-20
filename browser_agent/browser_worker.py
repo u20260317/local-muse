@@ -3,6 +3,12 @@
 stdin：一次性 JSON（含会话级临时凭证，绝不写命令行、绝不落盘）
 stdout：仅一行 LM_RESULT_JSON:{...}；其余输出全部重定向到 stderr
 """
+
+# ============================================================
+# 【核心模块】浏览器子进程入口
+# 作用：stdin 收一次性 JSON job（含临时凭证）→ 调 runner → stdout 只回一行 LM_RESULT_JSON；不设 RLIMIT_AS（会杀 Servo）
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import contextlib
@@ -17,7 +23,7 @@ if str(ROOT) not in sys.path:
 from core import paths                      # noqa: E402
 from core.logger import redact              # noqa: E402
 
-paths.setup_playwright_env()                 # 子进程同样锁定项目内独立 Chromium
+paths.setup_browserr_env()                   # 子进程同样锁定项目内 Browserr 引擎
 from browser_agent.browser_runner import run_browser_job  # noqa: E402
 
 RESULT_PREFIX = "LM_RESULT_JSON:"
@@ -32,7 +38,10 @@ def main() -> int:
             {"ok": False, "error": f"参数解析失败：{exc}"}, ensure_ascii=False) + "\n")
         return 2
 
-    paths.apply_worker_memory_limit(int(job.get("memory_limit_mb", 0)))
+    # Browserr/Servo 不适用 RLIMIT_AS：实测其虚拟地址空间需求 >4GB（8192MB 才可启动，
+    # 512/2048/4096MB 均导致引擎无应答），而实际 RSS 只有数百 MB。Chromium 时代的
+    # 512MB 地址空间上限会直接杀死引擎，故浏览器子进程不设此限，内存改靠全局并发
+    # 上限 + 硬件阈值降级控制（与 Windows 原本无 RLIMIT_AS 的策略一致）。
     with contextlib.redirect_stdout(sys.stderr):
         try:
             result = run_browser_job(job)

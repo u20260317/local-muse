@@ -31,10 +31,8 @@ echo [2/4] Installing Python dependencies ...
 "%VPY%" -m pip install -r requirements.txt
 if errorlevel 1 goto :fail
 
-echo [3/4] Downloading Playwright built-in Chromium into project subfolder browser_bin ...
-REM Relative to project root (resolved at runtime); NO hard-coded absolute path.
-set "PLAYWRIGHT_BROWSERS_PATH=browser_bin"
-"%VPY%" -m playwright install chromium
+echo [3/4] Downloading Browserr (Servo) engine into project subfolder browserr_bin ...
+"%VPY%" scripts\install_browserr.py
 if errorlevel 1 goto :fail
 
 echo [4/4] Checking environment ...
@@ -43,7 +41,7 @@ if errorlevel 1 goto :fail
 
 echo.
 echo [OK] Setup finished. Next: scripts\start.bat
-echo      Fill API keys in config.json or in the web panel later.
+echo      Local API only: start zen-gate first, then set ZEN_GATE_API_KEY or fill zen_gate_local.api_key in config.json.
 if "%~1"=="" pause
 exit /b 0
 

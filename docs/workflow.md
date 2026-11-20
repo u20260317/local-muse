@@ -40,8 +40,8 @@
    `dry_run` 不申请任何真实凭证。
 6. **浏览器子进程**：`sandbox_wrapper.run_worker("browser", payload, timeout)` 启动独立 Python 进程，
    payload（含临时凭证）经 **stdin** 传入；`browser_worker` 调用 `browser_runner.run_browser_job()`，
-   使用项目内 `browser_bin/` 的 Playwright 内置独立 Chromium + `browser_profile/session_<task_id>/`，
-   执行 goto / fill / click / extract / screenshot；二进制目录由 `paths.setup_playwright_env()` 在 import 前注入。
+   使用项目内 `browserr_bin/` 的 Browserr（Servo）引擎 + `browser_profile/session_<task_id>/`，
+   执行 goto / fill / click / extract / screenshot；二进制目录由 `paths.setup_browserr_env()` 在 import 前注入。
    结果经 stdout 一行 `LM_RESULT_JSON:{...}` 回传，PID 登记到 `_pids[task_id]`。
 7. **生成（每阶段独立子进程）**：`image_gen.generate()` → `ApiPool.pick("image")` → `acquire()` 拿该源信号量与令牌 →
    `build_generation_request()` → `run_worker("media", ...)` 子进程发请求 / 下载 / 校验 → `release()`。
@@ -75,7 +75,7 @@ sequenceDiagram
         R->>D: 写 RUNNING / plan
         R->>W: issue_session_credential(task_id, engine_token)
         W-->>R: 会话级临时凭证
-        R->>B: stdin 传参（独立 Chromium 会话）
+        R->>B: stdin 传参（独立 Browserr 会话）
         B-->>R: materials / screenshots
         R->>G: 生成请求（单源配额已 acquire）
         G-->>R: 产物路径 + 校验结果
@@ -151,7 +151,7 @@ vault/cards.json（受限权限，可选加密）
    └─ 决策引擎 issue_session_credential(task_id, engine_token)  [内存]
         └─ stdin → browser_worker（独立子进程）
              └─ context.add_cookies / set_extra_http_headers / add_init_script
-                  └─ 仅注入 browser_profile/session_<task_id>/ 的隔离 Chromium
+                  └─ 仅注入 browser_profile/session_<task_id>/ 的隔离 Browserr
    ✗ 不进入 media_generator、不进入 API 请求体、不进入 prompt、不进日志、不进面板响应
 任务结束 → vault.revoke(task_id) 清空该会话
 ```
@@ -160,12 +160,12 @@ vault/cards.json（受限权限，可选加密）
 
 ```
 setup.bat/sh        → cd 到脚本上一级（项目根）；python -m venv / pip install -r requirements.txt
-                     → 设 PLAYWRIGHT_BROWSERS_PATH=browser_bin（相对项目根）
-                     → python -m playwright install chromium（二进制落到项目内 browser_bin/）
+                     → 设 BROWSERR_HOME=browserr_bin（相对项目根）
+                     → python -m scripts/install_browserr.* 下载 Browserr 官方 release（二进制落到项目内 browserr_bin/）
                      → python main.py --setup-check
-start.bat/sh/ps1    → python main.py [--host/--port]（运行时由 paths.setup_playwright_env() 注入浏览器目录）
+start.bat/sh/ps1    → python main.py [--host/--port]（运行时由 paths.setup_browserr_env() 注入浏览器目录）
 dry_run_test.*      → python main.py --dry-run-test --dry-run-count 3
-install_chromium.*  → 同上，只重下/修复 browser_bin/ 内的 Chromium
+install_browserr.*  → 同上，只重下/修复 browserr_bin/ 内的 Browserr
 reset_browser.*     → 删除 browser_profile/session_*（二次确认）
 stop.*              → 读 logs/local_muse.pid → 校验命令行含 main.py → 终止
 ```

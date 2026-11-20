@@ -46,4 +46,4 @@ enabled: true
 `plan → image（首帧）→ video（以首帧为参考图）→ reflect`
 
 本技能默认 `needs_browser = false`：技能名不含 `research`，决策引擎不会为它启动浏览器子任务，
-适合 L430 这类弱硬件设备，减少一次 Chromium 实例开销。
+适合 L430 这类弱硬件设备，减少一次 Browserr 实例开销。

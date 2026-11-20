@@ -1,16 +1,18 @@
+> **本版（Browserr + 本地 zen-gate）优先读**：DEPLOY.md（部署）→ DESIGN.md（设计）→ DECISION_ENGINE.md（决策引擎）→ MODULES.md（模块地图）→ AI_GUIDE.md（AI 维护指南）→ BROWSERR_ZENGATE.md（迁移与实测）。本文及 system_design/module_spec 等为原版文档，个别 Chromium 字样以新文档为准。
+
 # Local-Muse 本地自治 Agent 系统
 
 面向 ThinkPad L430 等老旧设备的**纯 Python 本地自治 Agent 系统**：Agent 自主决策、多条任务并发调度、
-独立 Chromium 浏览器自动化、图文视频生成、敏感凭证安全隔离，全部通过仅本机可访问的 Flask Web 面板管理。
+独立 Browserr 浏览器自动化、图文视频生成、敏感凭证安全隔离，全部通过仅本机可访问的 Flask Web 面板管理。
 
 - **不使用 Docker，不使用任何容器虚拟化**：隔离只靠 Python `subprocess` 子进程 + 超时 + 独立目录。
-- **浏览器隔离铁则**：只启动由 `setup` 脚本下载到项目内 `browser_bin/` 的 Playwright 自带独立 Chromium；
+- **浏览器隔离铁则**：只启动由 `setup` 脚本下载到项目内 `browserr_bin/` 的 Browserr（Servo）引擎；
   绝不接管、读取、唤醒本机 Chrome / Edge / Firefox，Cookie 与缓存只存在项目内 `browser_profile/`。
 - **跨平台路径铁则**：全项目零硬编码绝对路径。运行期目录由 `core/paths.py` 基于 `__file__` 动态解析；
-  一键脚本按自身位置定位项目根；安装脚本用相对路径 `PLAYWRIGHT_BROWSERS_PATH=browser_bin`，
-  运行时由 `setup_playwright_env()` 统一注入解析结果，Windows / Linux 通用。
+  一键脚本按自身位置定位项目根；安装脚本用相对路径 `BROWSERR_HOME=browserr_bin`，
+  运行时由 `setup_browserr_env()` 统一注入解析结果，Windows / Linux 通用。
 - **凭证隔离铁则**：`vault/` 独立凭证容器与生成模块完全解耦；只有决策引擎能申请会话级临时凭证，
-  凭证只经 stdin 注入隔离 Chromium，绝不进入绘画 / 视频 prompt 或 API 请求体。
+  凭证只经 stdin 注入隔离 Browserr，绝不进入绘画 / 视频 prompt 或 API 请求体。
 - **无公网暴露**：面板只监听 `127.0.0.1`。
 - **API 密钥**：统一放 `config.json`，代码零硬编码。
 
@@ -21,8 +23,8 @@
 | 板块 | 目录 | 职责 |
 | --- | --- | --- |
 | 1 决策引擎 + 并发调度中心 | `agent_engine/` | 优先级队列、并发分发、思考链、Skill 提示词、失败复盘、prompt 自迭代、工作流编排 |
-| 2 独立 Chromium + Vault | `browser_agent/` | 独立浏览器会话、会话级凭证注入、轻量子进程隔离、超时强杀 |
-| 3 图文视频 API 聚合 | `media_generator/` | 免费源严格优先（OpenRouter `:free` 首选）+ 同档加权轮询、单服务商并发锁、令牌桶限速、429 冷却、下载与完整性校验 |
+| 2 独立 Browserr + Vault | `browser_agent/` | 独立浏览器会话、会话级凭证注入、轻量子进程隔离、超时强杀 |
+| 3 图文视频 API 聚合 | `media_generator/` | 本地源优先（唯一启用 `zen_gate_local`）+ 同档加权轮询、单服务商并发锁、令牌桶限速、429 冷却、下载与完整性校验 |
 | 4 Flask 本机面板 | `web_panel/` | 对话工作台（三栏）、实时并发看板、全局配置、Skill 管理、API 源管理、Vault 连接器、实时日志、产物预览 |
 
 另有 `core/` 共享基础层（配置 / SQLite 会话记忆 / 日志 / 硬件采样 / 数据契约），被四大板块单向依赖；
@@ -36,8 +38,8 @@
 local_muse/
 ├── main.py                  # 入口：调度 loop 线程 + Flask 主线程 + CLI
 ├── config.json              # 全局配置（含 API Key 空占位）、并发上限、硬件阈值
-├── requirements.txt         # flask / playwright / requests / schedule / cryptography
-├── .gitignore               # 忽略 browser_bin/ vault/ browser_profile/ output/ logs/ db/*.db .venv/
+├── requirements.txt         # flask / browserr / requests / schedule / cryptography
+├── .gitignore               # 忽略 browserr_bin/ vault/ browser_profile/ output/ logs/ db/*.db .venv/
 ├── core/                    # paths / config / models / db（含会话记忆表）/ logger / hardware
 ├── agent_engine/            # task_queue / planner / skill_loader / task_loop
 ├── browser_agent/           # vault / browser_runner / sandbox_wrapper / browser_worker
@@ -45,8 +47,8 @@ local_muse/
 ├── media_generator/         # api_pool / image_gen / video_gen / downloader / media_worker
 ├── web_panel/               # app.py / bridge.py / templates（含 chat.html）/ static
 ├── scripts/                 # .bat / .sh / .ps1 一键脚本 + README.md
-├── browser_bin/             # 仅本项目使用的 Playwright 内置 Chromium 二进制（不入库）
-├── browser_profile/         # 唯一 Chromium 用户数据根：session_<task_id>/（不入库）
+├── browserr_bin/             # 仅本项目使用的 Browserr 引擎 二进制（不入库）
+├── browser_profile/         # 唯一 Browserr 用户数据根：session_<task_id>/（不入库）
 ├── vault/                   # Vault 加密凭证保险库：cards.json（Fernet）+ .key（不入库）
 ├── output/                  # 产物，按 task_id 分目录
 ├── logs/                    # 运行日志与 PID 文件
@@ -56,7 +58,7 @@ local_muse/
 
 > 路径说明：需求中「项目内 `browser_profile/`」统一为**项目根级**目录；
 > `browser_agent/browser_profile/` 只保留一个 README 占位说明，避免两处真实数据目录导致 Cookie 分散。
-> `browser_bin/`（Chromium 二进制）与 `browser_profile/`（用户数据）职责分离，都在项目根级且均不入库。
+> `browserr_bin/`（Browserr 二进制）与 `browser_profile/`（用户数据）职责分离，都在项目根级且均不入库。
 > 目录树里所有路径都是**相对项目根**的写法；代码与脚本中没有任何平台相关的硬编码绝对路径，
 > 运行期由 `core/paths.py` 动态解析，Windows / Linux 通用。
 
@@ -69,7 +71,7 @@ local_muse/
 **Windows**
 
 ```bat
-:: 1) 首次初始化（创建 .venv、安装依赖、下载独立 Chromium、环境自检）
+:: 1) 首次初始化（创建 .venv、安装依赖、下载独立 Browserr、环境自检）
 scripts\setup.bat
 
 :: 2) 启动（双击亦可）
@@ -105,18 +107,16 @@ python -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 # Windows 用：.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-# 4. 只把 Playwright 自带独立 Chromium 下载到项目内 browser_bin/（不碰系统浏览器）
-#    先 cd 到项目根，安装目录用相对路径；Windows PowerShell 用
-#    $env:PLAYWRIGHT_BROWSERS_PATH="browser_bin"，CMD 用 set PLAYWRIGHT_BROWSERS_PATH=browser_bin
-PLAYWRIGHT_BROWSERS_PATH=browser_bin .venv/bin/python -m playwright install chromium
-# 等价于：bash scripts/install_chromium.sh（Windows：scripts\install_chromium.bat）
+# 4. 只把 Browserr（Servo）引擎下载到项目内 browserr_bin/（不碰系统浏览器，强制 sha256 校验）
+.venv/bin/python scripts/install_browserr.py
+# 等价于：bash scripts/install_browserr.sh（Windows：scripts\install_browserr.bat）
 
 # 5. 环境自检
 .venv/bin/python main.py --setup-check
 
-# 6. 填写 API Key：启动后到面板「全局配置 → API Key 管理」填写（推荐先填 openrouter_free），
-#    或直接编辑 config.json 的 providers[].api_key；「API 源与会话」页不提供 Key 输入
-#    OpenRouter 的 :free 免费模型仍需 Key；未配置 Key 的源自动跳过，可先用自检模式跑通链路
+# 6. 本地 API（唯一启用源 zen_gate_local）：先启动本机 zen-gate，再二选一填它的 mainKey：
+#    环境变量 ZEN_GATE_API_KEY（推荐，key 不落文件），或 config.json 的
+#    providers[zen_gate_local].api_key；其余远程源已全部 enabled=false，不会被调用
 
 # 7. 启动调度器 + 面板
 .venv/bin/python main.py
@@ -125,9 +125,10 @@ PLAYWRIGHT_BROWSERS_PATH=browser_bin .venv/bin/python -m playwright install chro
 .venv/bin/python main.py --dry-run-test --dry-run-count 3
 ```
 
-此时 Chromium 落在**项目根级 `browser_bin/`**，不是用户全局的 Playwright 缓存目录，与系统日常浏览器完全无关；
-程序由 `core/paths.py::setup_playwright_env()` 在任何 `import playwright` 之前注入该目录，
-再通过 `launch_persistent_context(user_data_dir=browser_profile/session_<task_id>)` 启动。
+此时 Browserr 落在**项目根级 `browserr_bin/`**，与系统日常浏览器完全无关；
+程序由 `core/paths.py::setup_browserr_env()` 定位该目录（`BROWSERR_HOME`/`BROWSERR_ENGINE`），
+`browser_runner.py` 从 `browserr_bin/driver.py` 载入官方 SDK，
+再通过 `Driver(profile_dir=browser_profile/session_<task_id>)` 启动。
 
 ---
 
@@ -135,10 +136,10 @@ PLAYWRIGHT_BROWSERS_PATH=browser_bin .venv/bin/python -m playwright install chro
 
 | 脚本 | 作用 |
 | --- | --- |
-| `setup.bat` / `setup.sh` | 首次初始化：venv + 依赖 + 把独立 Chromium 装到 `browser_bin/` + `--setup-check` |
+| `setup.bat` / `setup.sh` | 首次初始化：venv + 依赖 + 把独立 Browserr 装到 `browserr_bin/` + `--setup-check` |
 | `start.bat` / `start.sh` / `start.ps1` | 一键启动，参数透传给 `main.py` |
 | `dry_run_test.bat` / `.sh` | 并行自检（不联网、不需要 Key、产物标注「模拟」） |
-| `install_chromium.bat` / `.sh` | 单独安装 / 修复 `browser_bin/` 内的独立 Chromium |
+| `install_browserr.bat` / `.sh` | 单独安装 / 修复 `browserr_bin/` 内的独立 Browserr |
 | `reset_browser.bat` / `.sh` | 二次确认后清空 `browser_profile/session_*` |
 | `stop.bat` / `.sh` | 校验 PID 命令行后仅停止本项目服务 |
 
@@ -166,7 +167,7 @@ PLAYWRIGHT_BROWSERS_PATH=browser_bin .venv/bin/python -m playwright install chro
 | | `timeout_seconds` / `navigation_timeout_ms` | `60` / `30000` | 浏览器任务与页面导航超时 |
 | | `per_session_profile` | `true` | 每任务独立用户数据目录 |
 | `upload` | `enabled` | `false` | 可选上传，默认关闭 |
-| `providers[]` | `name/kind/style/base_url/path/model/api_key/enabled/priority/weight/rpm/max_concurrency` | — | 每个免费源的端点、密钥、优先级、轮询权重、限速与并发配额；`openrouter_free` 默认 `priority=10` 为首选 |
+| `providers[]` | `name/kind/style/base_url/path/model/api_key/enabled/priority/weight/rpm/max_concurrency` | — | 每个免费源的端点、密钥、优先级、轮询权重、限速与并发配额；`zen_gate_local` 默认 `priority=100` 为唯一启用源，其余远程源已禁用 |
 
 面板「全局配置」保存后原子写入并热更新（端口变更需重启）；面板只显示密钥是否已配置，绝不回显正文。
 
@@ -176,7 +177,7 @@ PLAYWRIGHT_BROWSERS_PATH=browser_bin .venv/bin/python -m playwright install chro
 
 | 项 | 推荐值 | 理由 |
 | --- | --- | --- |
-| 全局最大并发 `max_concurrency` | **2**（内存 < 4GB 时改 **1**） | 单个 Chromium 实例约 150–300MB，2 条已接近老旧设备舒适上限 |
+| 全局最大并发 `max_concurrency` | **2**（内存 < 4GB 时改 **1**） | 单个 Browserr 实例约 150–300MB，2 条已接近老旧设备舒适上限 |
 | 单服务商并发上限 | **1** | 避免同服务商并发触发 429 |
 | 文本 / 图像 / 视频 RPM | 6 / 3 / 2 | 令牌桶限速，宁慢勿封 |
 | 每日任务数 | **10**（可下调至 3–5） | 减少长时间占用与免费额度消耗 |
@@ -199,7 +200,7 @@ PLAYWRIGHT_BROWSERS_PATH=browser_bin .venv/bin/python -m playwright install chro
 1. **并发任务看板**（首页）：批量提交并行任务、优先级/插队选择、运行中任务进度与 PID、单独终止指定 task_id、队列与历史、产物预览。
 2. **全局配置**：并发上限、每日任务数、重试、浏览器无头/有头与超时、硬件阈值、API Key、vault 凭证卡片。
 3. **Skill 管理**：查看 / 新增 / 编辑 / 删除 `docs/skills/*.md`。
-4. **API 源与浏览器会话**：启停、权重、并发配额、当前并发数、冷却倒计时、额度消耗日志、并行 Chromium 会话列表、一键重置环境。
+4. **API 源与浏览器会话**：启停、权重、并发配额、当前并发数、冷却倒计时、额度消耗日志、并行 Browserr 会话列表、一键重置环境。
 5. **实时日志与产物**：按 task_id / 级别过滤，日志带任务编号，图片 / 视频 / dry_run 清单预览。
 
 底部状态条常驻显示 CPU、内存、活跃并发、排队数、降级状态与监听地址。
@@ -210,7 +211,7 @@ PLAYWRIGHT_BROWSERS_PATH=browser_bin .venv/bin/python -m playwright install chro
 
 未配置任何 API Key 时也能验证完整链路：提交任务时勾选「自检模式」，或运行 `--dry-run-test`。
 
-- 依然会执行：优先级入队 → 并发分发 → 决策与 Skill → **独立浏览器子进程**（自检时不联网/不启动 Chromium）
+- 依然会执行：优先级入队 → 并发分发 → 决策与 Skill → **独立浏览器子进程**（自检时不联网/不启动 Browserr）
   → 生成子进程 → 下载与完整性校验 → SQLite 按 task_id 落库 → 独立复盘。
 - 图片产物为 1×1 占位 PNG，视频只写 `simulated_video.json` 清单，**不伪造 mp4**。
 - 任务记录 `simulated = true`，日志与面板均标注「模拟」，绝不冒充真实生成成功。
@@ -227,17 +228,17 @@ PLAYWRIGHT_BROWSERS_PATH=browser_bin .venv/bin/python -m playwright install chro
 | `workflow.md` | 全链路工作流、文字版时序、并发任务流转、失败与降级路径 |
 | `security.md` | vault 凭证隔离、进程隔离、隐私保护、API 风控、并发安全约束 |
 | `api_list.md` | 全部免费 API 的地址、额度、限速、调用文档与风险提示 |
-| `troubleshooting.md` | L430 常见故障：并发卡死、并发超限、多 Chromium 资源占用、429、脚本启动失败 |
+| `troubleshooting.md` | L430 常见故障：并发卡死、并发超限、多 Browserr 资源占用、429、脚本启动失败 |
 | `skills/*.md` | 三套内置 Agent 技能与 System Prompt |
 
 ---
 
 ## 十、安全提醒
 
-- 填写真实 API Key 后不要提交 `config.json` 到公开仓库；`.gitignore` 已忽略运行期数据、`browser_bin/` 与 `vault/`。
+- 填写真实 API Key 后不要提交 `config.json` 到公开仓库；`.gitignore` 已忽略运行期数据、`browserr_bin/` 与 `vault/`。
 - 不要把面板通过内网穿透、端口映射暴露到公网；程序已强制只绑定回环地址。
-- `browser_profile/` 里的会话 Cookie 属于隔离 Chromium，清理用面板「一键重置」或 `reset_browser.*` 脚本；
-  `browser_bin/` 只放二进制，可整目录删除后用 `install_chromium.*` 重装，不要手工指向系统浏览器。
+- `browser_profile/` 里的会话 Cookie 属于隔离 Browserr，清理用面板「一键重置」或 `reset_browser.*` 脚本；
+  `browserr_bin/` 只放二进制，可整目录删除后用 `install_browserr.*` 重装，不要手工指向系统浏览器。
 - `vault/.key` 是 Fernet 密钥，与 `cards.json` 同目录；不要提交、不要分享整个 `vault/` 目录。
 
 ---

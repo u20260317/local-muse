@@ -3,6 +3,12 @@
 不引入 Quart/FastAPI 等异步 Web 框架，用 run_coroutine_threadsafe
 把提交/取消/快照请求投递到调度 loop，避免跨线程直接操作事件循环对象。
 """
+
+# ============================================================
+# 【核心模块】面板层 · 同步-异步桥
+# 作用：用 run_coroutine_threadsafe 把 Flask 线程的提交/取消/快照投递到调度事件循环
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import asyncio

@@ -12,9 +12,9 @@
 | 面板打不开 | 端口占用、启动日志、是否被防火墙拦截回环 |
 | 任务一直排队不执行 | `degraded` 降级状态、全局并发上限、调度器是否启动 |
 | 任务全部失败 | `/api/logs` 中对应 task_id 的 ERROR、子进程 stderr |
-| 浏览器任务失败 | Playwright 内置 Chromium 是否安装、会话目录权限 |
+| 浏览器任务失败 | Browserr 引擎 是否安装、会话目录权限 |
 | 生成全是「模拟」 | 是否勾选自检模式 / 服务商无 Key 或被禁用 |
-| 整机卡顿 | CPU、内存、并发数、Chromium 实例数 |
+| 整机卡顿 | CPU、内存、并发数、Browserr 实例数 |
 
 ---
 
@@ -55,16 +55,16 @@
 优先级说明：`insert` 插队只影响**排队顺序**，不会突破全局并发上限或硬件降级门禁。
 
 > 例外：`main.py --dry-run-test` 与 `scripts/dry_run_test.*` 会临时调用 `set_hardware_gate(False)`
-> 关闭硬件降级门禁——自检不启动真实 Chromium、不联网，若本机内存本就偏高（如 93%），
+> 关闭硬件降级门禁——自检不启动真实 Browserr、不联网，若本机内存本就偏高（如 93%），
 > 开启门禁会让排队任务一直等不到派发。**正常启动服务时该门禁始终开启**。
 
 ---
 
-## 4. 多 Chromium 实例资源占用
+## 4. 多 Browserr 实例资源占用
 
 **症状**：内存飙升、风扇狂转、`browser_profile/` 下出现多个 `session_*` 目录。
 
-- 单个独立 Chromium 实例约 150–300MB；默认 `max_concurrency=2` 即最多两个并行浏览器任务。
+- 单个独立 Browserr 实例约 150–300MB；默认 `max_concurrency=2` 即最多两个并行浏览器任务。
 - 只有技能名含 `research` 的计划会把 `needs_browser` 置为 true；用 `blessing_video_hit_v2` /
   `auto_optimize_prompt` 可减少浏览器实例。
 - 在「API 源 / 会话」页查看每个会话目录占用（MB），用「清空缓存 / 一键重置环境」清理（需二次确认，且无活跃任务）。
@@ -90,32 +90,32 @@
 
 ---
 
-## 6. Playwright / 独立 Chromium 问题
+## 6. Browserr / 独立 Browserr 问题
 
 | 报错 | 处理 |
 | --- | --- |
-| `playwright not installed` / `模块不存在` | `.venv/bin/python -m pip install -r requirements.txt`（Windows 用 `.venv\Scripts\python.exe`） |
-| `Executable doesn't exist ... chromium-...` | 重跑 `scripts/install_chromium.*`；它会在项目根设置 `PLAYWRIGHT_BROWSERS_PATH=browser_bin` 并下载到项目内 `browser_bin/`。手动安装时务必先 `cd` 到项目根再执行，否则相对路径会指向别处 |
-| 下载超时 / 证书错误 | 检查代理与网络后重试；确认 `browser_bin/` 可写；只下载 Playwright 自带二进制，**不要**改用系统 Chrome |
-| 进度长时间停在 0% | 官方 CDN 会 302 到 `storage.googleapis.com`，部分网络直连超时。设置 `PLAYWRIGHT_DOWNLOAD_HOST` 指向可访问镜像后重跑 `install_chromium.*`；脚本不覆盖该变量，未设置时走官方源，安装目录仍锁定在项目内 `browser_bin/` |
+| `browserr not installed` / `模块不存在` | `.venv/bin/python -m pip install -r requirements.txt`（Windows 用 `.venv\Scripts\python.exe`） |
+| `Executable doesn't exist ... browserr-...` | 重跑 `scripts/install_browserr.*`；它会在项目根设置 `BROWSERR_HOME=browserr_bin` 并下载到项目内 `browserr_bin/`。手动安装时务必先 `cd` 到项目根再执行，否则相对路径会指向别处 |
+| 下载超时 / 证书错误 | 检查代理与网络后重试；确认 `browserr_bin/` 可写；只下载 Browserr 自带二进制，**不要**改用系统 Chrome |
+| 进度长时间停在 0% | 官方 CDN 会 302 到 `storage.googleapis.com`，部分网络直连超时。设置 `PLAYWRIGHT_DOWNLOAD_HOST` 指向可访问镜像后重跑 `install_browserr.*`；脚本不覆盖该变量，未设置时走官方源，安装目录仍锁定在项目内 `browserr_bin/` |
 | `Target page/context closed` | 页面崩溃或超时被杀；缩短导航超时、降低并发、确认内存充足 |
 | 有头模式不显示窗口 | 检查 `browser.headless` 是否为 `false`；无桌面环境（Linux 服务器）只能用无头 |
-| 项目移到另一台机器后浏览器报错 | 自带 `browser_bin/` 可整目录拷贝；若缺失只需重跑安装脚本，不要写死任何盘符路径 |
+| 项目移到另一台机器后浏览器报错 | 自带 `browserr_bin/` 可整目录拷贝；若缺失只需重跑安装脚本，不要写死任何盘符路径 |
 
-环境自检命令：`python main.py --setup-check`，会以**相对项目根**的形式打印内置 Chromium 可执行文件与是否存在（不展示平台相关的绝对路径）。
+环境自检命令：`python main.py --setup-check`，会以**相对项目根**的形式打印内置 Browserr 可执行文件与是否存在（不展示平台相关的绝对路径）。
 
 ---
 
 ## 7. Python 3.14 / Windows 兼容
 
-- 项目只用标准库 + `flask / playwright / requests / schedule`；若某依赖版本不支持 3.14，先升级该包。
+- 项目只用标准库 + `flask / browserr / requests / schedule`；若某依赖版本不支持 3.14，先升级该包。
 - Windows 上 `asyncio` 默认 Proactor 事件循环，子进程通信依赖它；不要用第三方循环替换。
 - Windows 没有 `resource.RLIMIT_AS`，`subprocess_memory_limit_mb` 不生效是正常的，靠并发与阈值降级控制内存。
 - `.bat` 脚本全部 ASCII + `chcp 65001`；若中文显示为乱码，改用 `scripts/start.ps1` 或直接手动命令。
 - 路径含空格时脚本用 `cd /d "%~dp0.."` / `cd "$(dirname ...)/.."`，不要自行改成裸相对路径。
 - 项目内**没有**任何硬编码绝对路径：Windows 与 Linux 都按脚本位置 / `__file__` 动态解析项目根。
-  若从别的工作目录手动执行 `python main.py`，浏览器目录仍由 `setup_playwright_env()` 正确解析；
-  但手动执行 `playwright install chromium` 时，必须先进入项目根再设 `PLAYWRIGHT_BROWSERS_PATH=browser_bin`，
+  若从别的工作目录手动执行 `python main.py`，浏览器目录仍由 `setup_browserr_env()` 正确解析；
+  但手动执行 `scripts/install_browserr.* 下载 Browserr 官方 release` 时，必须先进入项目根再设 `BROWSERR_HOME=browserr_bin`，
   否则相对目录会被解析到错误的当前目录。
 
 ---

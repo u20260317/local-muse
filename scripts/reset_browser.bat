@@ -2,7 +2,7 @@
 setlocal
 chcp 65001 >nul
 cd /d "%~dp0.."
-echo This will DELETE browser_profile\session_* (isolated Chromium sessions only).
+echo This will DELETE browser_profile\session_* (isolated Browserr sessions only).
 echo Your daily Chrome / Edge / Firefox data is NEVER touched.
 set "ANS="
 set /p ANS=Type Y to continue:

@@ -19,8 +19,8 @@
   <div class="callout">
     <b>API Key 不在这个页面填。</b>请到
     <a class="btn btn-ghost btn-xs" href="/config#api-keys">全局配置 → API Key 管理</a>
-    找到对应服务商（推荐先填 <code>openrouter_free</code>）输入 Key，再点「保存配置」；本页只管开关、权重、并发配额与 RPM。
-    OpenRouter 的 <code>:free</code> 免费模型<strong>仍然需要 Key</strong>；未配置 Key 的源会被自动跳过，不会发起请求。
+    找到 <code>zen_gate_local</code> 填入本机 zen-gate 的 mainKey（或用环境变量 <code>ZEN_GATE_API_KEY</code> 注入），再点「保存配置」；本页只管开关、权重、并发配额与 RPM。
+    当前仅启用本机 zen-gate；其余远程源已全部禁用。未配置 Key 的源会被自动跳过，不会发起请求。
   </div>
   <div class="table-wrap">
     <table class="table">
@@ -28,7 +28,7 @@
       <tbody id="sources-body"><tr><td colspan="9" class="muted">加载中…</td></tr></tbody>
     </table>
   </div>
-  <div class="callout">选源按 <code>priority</code> 严格优先：<code>openrouter_free</code> 为首选（priority=10），仅当它缺 Key、被禁用或处于 429 冷却时才降级到其它源；同档内按 weight 加权轮询。免费额度、限速与接口地址以各家官方最新文档为准，详见 <code>docs/api_list.md</code>。</div>
+  <div class="callout">选源按 <code>priority</code> 严格优先：当前仅 <code>zen_gate_local</code>（priority=100，本机回环）启用；它缺 Key 或处于 429 冷却时，文本阶段降级为模板计划，不会改走已禁用的远程源。免费额度、限速与接口地址以各家官方最新文档为准，详见 <code>docs/api_list.md</code>。</div>
 </section>
 
 <div class="two-col section-gap">
@@ -43,7 +43,7 @@
   </section>
 
   <section class="glass">
-    <div class="section-head"><h2>并行独立 Chromium 会话</h2><span class="hint">每个任务独立用户数据目录</span></div>
+    <div class="section-head"><h2>并行独立 Browserr 会话</h2><span class="hint">每个任务独立用户数据目录</span></div>
     <div class="table-wrap">
       <table class="table">
         <thead><tr><th>会话目录</th><th>task_id</th><th>占用</th></tr></thead>

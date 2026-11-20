@@ -2,6 +2,12 @@
 
 所有运行期数据目录都固定在本项目内，绝不指向系统浏览器的用户目录。
 """
+
+# ============================================================
+# 【核心模块】基础层 · 路径与 Browserr 环境
+# 作用：全部运行期目录固定在项目内；setup_browserr_env/browserr_ready 定位 browserr_bin 引擎与 SDK
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import os
@@ -14,8 +20,9 @@ IS_WINDOWS = os.name == "nt"
 ROOT = Path(__file__).resolve().parent.parent
 
 DIRS: dict[str, Path] = {
-    "browser_bin": ROOT / "browser_bin",           # Playwright 内置 Chromium 二进制（仅本项目）
-    "browser_profile": ROOT / "browser_profile",   # 唯一 Chromium 用户数据根
+    "browserr_bin": ROOT / "browserr_bin",         # Browserr 引擎 + driver.py（仅本项目，不入库）
+    "browser_bin": ROOT / "browserr_bin",          # 旧键名别名，指向同一目录，避免外部引用失效
+    "browser_profile": ROOT / "browser_profile",   # 唯一 Browserr 用户数据根（Servo profile）
     "vault": ROOT / "vault",                       # 加密凭证保险库（受限权限）
     "output": ROOT / "output",                     # 产物根目录
     "logs": ROOT / "logs",                         # 运行日志
@@ -38,17 +45,46 @@ def ensure_dirs() -> None:
         directory.mkdir(parents=True, exist_ok=True)
 
 
-def setup_playwright_env() -> Path:
-    """把 Playwright 内置 Chromium 的安装/查找目录固定到项目内 browser_bin/。
+def setup_browserr_env() -> Path:
+    """把 Browserr 引擎目录固定到项目内 browserr_bin/。
 
-    Playwright 在 import 时读取 PLAYWRIGHT_BROWSERS_PATH，因此本函数必须在任何
-    `import playwright` 之前调用；主进程、自检命令与浏览器子进程都会调用它。
-    路径由 __file__ 动态解析，Windows / Linux 通用，不含任何硬编码绝对路径。
+    Browserr 的 Python SDK（driver.py）通过 BROWSERR_ENGINE / BROWSERR_HOME
+    定位引擎二进制；本函数把这两个变量指向项目内目录，绝不使用系统浏览器，
+    也不依赖用户全局的 ~/.browserr 缓存。路径由 __file__ 动态解析，
+    Windows / Linux 通用，不含任何硬编码绝对路径。
     """
-    target = DIRS["browser_bin"]
+    target = DIRS["browserr_bin"]
     target.mkdir(parents=True, exist_ok=True)
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(target)
+    os.environ["BROWSERR_HOME"] = str(target)
+    engine = browserr_engine_path()
+    if engine.exists():
+        os.environ["BROWSERR_ENGINE"] = str(engine)
     return target
+
+
+def setup_playwright_env() -> Path:
+    """旧名兼容别名：Chromium/Playwright 已移除，统一转发到 Browserr。"""
+    return setup_browserr_env()
+
+
+def browserr_engine_path() -> Path:
+    """Browserr 引擎二进制路径（Windows 为 engine.exe，其余为 engine）。"""
+    name = "engine.exe" if IS_WINDOWS else "engine"
+    return DIRS["browserr_bin"] / name
+
+
+def browserr_driver_path() -> Path:
+    """Browserr Python SDK（driver.py，随官方 release 一同分发）路径。"""
+    return DIRS["browserr_bin"] / "driver.py"
+
+
+def browserr_ready() -> tuple[bool, str]:
+    """检查 Browserr 引擎与 SDK 是否已下载到项目内 browserr_bin/。"""
+    engine, driver = browserr_engine_path(), browserr_driver_path()
+    if engine.exists() and driver.exists():
+        return True, rel(engine)
+    missing = [rel(p) for p in (engine, driver) if not p.exists()]
+    return False, "未下载：" + "、".join(missing) + "，请运行 scripts/install_browserr.*"
 
 
 def rel(path: Path) -> str:
@@ -65,7 +101,7 @@ def safe_id(task_id: str) -> str:
 
 
 def session_dir(task_id: str) -> Path:
-    """每个任务独立 Chromium 用户数据目录（Cookie / 缓存 / 本地存储天然隔离）。"""
+    """每个任务独立 Browserr 用户数据目录（Cookie / 缓存 / 本地存储天然隔离）。"""
     path = DIRS["browser_profile"] / f"session_{safe_id(task_id)}"
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -113,7 +149,7 @@ def reset_browser_env() -> int:
 def subprocess_options() -> dict[str, int | bool]:
     """子进程创建参数：独立进程组 / 会话，便于超时强杀整棵进程树。
 
-    Windows 没有 RLIMIT_AS，内存靠「全局并发上限 + 硬件阈值降级 + Chromium 参数」控制；
+    Windows 没有 RLIMIT_AS，内存靠「全局并发上限 + 硬件阈值降级」控制；
     Linux 的内存上限由 worker 启动后自行调用 apply_worker_memory_limit() 设置。
     """
     if IS_WINDOWS:

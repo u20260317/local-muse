@@ -2,6 +2,12 @@
 
 所有 API 密钥只存在于 config.json，由本模块在进程内读取；面板只拿脱敏视图。
 """
+
+# ============================================================
+# 【核心模块】基础层 · 配置管理
+# 作用：config.json 缺省合并/类型校验/原子写/脱敏视图/热更新；zen_gate_local 的 key 可由环境变量 ZEN_GATE_API_KEY 注入
+# 定位与接口：见 docs/MODULES.md；设计约束：见 docs/DESIGN.md
+# ============================================================
 from __future__ import annotations
 
 import copy
@@ -36,11 +42,12 @@ DEFAULT_CONFIG: dict = {
     },
     "browser": {
         "enabled": True,
+        "engine": "browserr",
         "headless": True,
         "timeout_seconds": 60,
         "navigation_timeout_ms": 30000,
         "per_session_profile": True,
-        "extra_args": ["--disable-dev-shm-usage", "--no-first-run"],
+        "extra_args": [],
     },
     "upload": {"enabled": False, "repo": "", "target": ""},
     "providers": [],
@@ -111,6 +118,13 @@ class ConfigManager:
     def providers(self, kind: str | None = None) -> list[dict]:
         with self._lock:
             items = copy.deepcopy(self._data.get("providers", []))
+        # 本地 zen-gate 源：config.json 里 api_key 留空时，从环境变量注入，
+        # 这样本机 mainKey 永远不需要写进仓库文件。
+        for item in items:
+            if item.get("name") == "zen_gate_local" and not item.get("api_key"):
+                env_key = os.environ.get("ZEN_GATE_API_KEY", "")
+                if env_key:
+                    item["api_key"] = env_key
         return [p for p in items if kind is None or p.get("kind") == kind]
 
     def provider(self, name: str) -> dict | None:

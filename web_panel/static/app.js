@@ -199,7 +199,7 @@
     try { sessions = await api('/api/sessions'); } catch (e) { return; }
     const sBody = $('sessions-body');
     if (sBody && sessions && sessions.ok) {
-      sBody.innerHTML = sessions.chromium.length ? sessions.chromium.map((s) => `
+      sBody.innerHTML = sessions.browserr.length ? sessions.browserr.map((s) => `
         <tr><td>${esc(s.name)}</td><td>${esc(s.task_id)}</td><td>${esc(s.size_mb)} MB</td></tr>`).join('')
         : '<tr><td colspan="3" class="muted">暂无会话</td></tr>';
     }
@@ -605,7 +605,7 @@
     setInterval(refreshSources, 3000);
     const reset = $('btn-reset-browser');
     if (reset) reset.addEventListener('click', async () => {
-      if (!confirm('确定清空 browser_profile/ 下全部独立 Chromium 会话？\n此操作不会影响本机日常浏览器。')) return;
+      if (!confirm('确定清空 browser_profile/ 下全部独立 Browserr 会话？\n此操作不会影响本机日常浏览器。')) return;
       try {
         const r = await post('/api/sessions/reset', {});
         if (r.ok) { note('sessions-note', `已清理 ${r.removed} 个会话目录`); refreshSources(); }
