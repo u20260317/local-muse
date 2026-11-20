@@ -1,0 +1,12 @@
+# Local-Muse 必需依赖（尽量精简，适配 ThinkPad L430）
+# 安装：pip install -r requirements.txt
+flask>=3.0,<4
+playwright>=1.44,<2
+requests>=2.31,<3
+schedule>=1.2,<2
+
+# 凭证保险库（vault）强制加密落盘，此依赖为必需，不再降级为明文
+cryptography>=42,<46
+
+# 以下为可选增强，缺失时程序自动降级到标准库实现，不必安装：
+# psutil>=5.9         # 若安装则用于更精确的 CPU/内存采样

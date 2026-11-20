@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}全局配置{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <div class="eyebrow">SYSTEM CONFIG · 热更新</div>
+    <h1>全局配置</h1>
+    <p class="sub">并发上限、浏览器参数、硬件保护阈值与 API 密钥集中管理；保存后立即生效，无需重启。</p>
+  </div>
+  <div class="hero-metrics"><div class="metric"><span>API 源</span><b>{{ config.providers|length }}</b></div>
+    <div class="metric"><span>已配置 Key</span><b>{{ key_count }}</b></div></div>
+</section>
+
+<form id="config-form" class="section-gap">
+  <div class="two-col">
+    <section class="glass">
+      <div class="section-head"><h2>调度与并发</h2><span class="hint">L430 建议全局并发 2</span></div>
+      <div class="form-grid">
+        <label>每日任务数量<input name="daily_task_limit" type="number" min="0" max="500" value="{{ config.scheduler.daily_task_limit }}"></label>
+        <label>全局最大并发上限<input name="max_concurrency" type="number" min="1" max="8" value="{{ config.scheduler.max_concurrency }}"></label>
+        <label>单服务商默认并发上限<input name="default_api_max_concurrency" type="number" min="1" max="8" value="{{ config.scheduler.default_api_max_concurrency }}"></label>
+        <label>定时执行间隔（秒）<input name="interval_seconds" type="number" min="30" value="{{ config.scheduler.interval_seconds }}"></label>
+        <label>失败自动重试次数<input name="retry_times" type="number" min="0" max="5" value="{{ config.scheduler.retry_times }}"></label>
+        <label>单任务超时（秒）<input name="task_timeout_seconds" type="number" min="30" value="{{ config.scheduler.task_timeout_seconds }}"></label>
+        <label>手动任务默认入队方式
+          <select name="manual_enqueue_mode">
+            <option value="queue" {{ 'selected' if config.scheduler.manual_enqueue_mode == 'queue' }}>排队</option>
+            <option value="insert" {{ 'selected' if config.scheduler.manual_enqueue_mode == 'insert' }}>插队</option>
+          </select>
+        </label>
+        <label>子进程内存上限（MB，Linux）<input name="subprocess_memory_limit_mb" type="number" min="0" value="{{ config.scheduler.subprocess_memory_limit_mb }}"></label>
+      </div>
+    </section>
+
+    <section class="glass">
+      <div class="section-head"><h2>独立 Chromium 浏览器</h2><span class="hint">仅 Playwright 内置二进制</span></div>
+      <div class="form-grid">
+        <label class="check"><input name="browser_enabled" type="checkbox" {{ 'checked' if config.browser.enabled }}> 启用浏览器自动化</label>
+        <label class="check"><input name="headless" type="checkbox" {{ 'checked' if config.browser.headless }}> 无头模式（取消勾选为有头）</label>
+        <label>浏览器任务超时（秒）<input name="timeout_seconds" type="number" min="10" value="{{ config.browser.timeout_seconds }}"></label>
+        <label>页面导航超时（毫秒）<input name="navigation_timeout_ms" type="number" min="1000" value="{{ config.browser.navigation_timeout_ms }}"></label>
+        <label class="check"><input name="per_session_profile" type="checkbox" {{ 'checked' if config.browser.per_session_profile }}> 每任务独立用户数据目录</label>
+      </div>
+      <div class="callout">用户数据根目录固定为项目内 <code>browser_profile/session_&lt;task_id&gt;/</code>，与本机 Chrome / Edge 完全隔离，不读取任何日常浏览器配置。</div>
+
+      <div class="section-head mt"><h2>硬件保护（L430）</h2></div>
+      <div class="form-grid">
+        <label>CPU 警戒线（%）<input name="cpu_threshold" type="number" min="1" max="100" value="{{ config.hardware.cpu_threshold }}"></label>
+        <label>内存警戒线（%）<input name="memory_threshold" type="number" min="1" max="100" value="{{ config.hardware.memory_threshold }}"></label>
+        <label>采样间隔（秒）<input name="sample_interval_seconds" type="number" min="1" value="{{ config.hardware.sample_interval_seconds }}"></label>
+        <label>恢复滞回（%）<input name="recovery_margin" type="number" min="1" max="40" value="{{ config.hardware.recovery_margin }}"></label>
+        <label>面板端口（仅本机）<input name="port" type="number" min="1024" max="65535" value="{{ config.server.port }}"></label>
+      </div>
+    </section>
+  </div>
+
+  <section class="glass section-gap" id="api-keys">
+    <div class="section-head"><h2>API Key 管理</h2><span class="hint">密钥只存 config.json；留空表示保持原值，面板永远不显示正文</span></div>
+    <div class="key-grid">
+      {% for p in config.providers %}
+      <label class="key-item">
+        <span><b>{{ p.name }}</b><small>{{ p.kind }} · {{ '已配置' if p.has_key else '未配置' }}</small></span>
+        <input type="password" data-key-for="{{ p.name }}" value="" autocomplete="new-password" placeholder="{{ '已配置，留空保持不变' if p.has_key else '填入 Key 后启用' }}">
+      </label>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="btn-row section-gap">
+    <button class="btn btn-primary" type="submit" id="btn-save-config">保存配置</button>
+    <span class="inline-note" id="config-note"></span>
+  </div>
+</form>
+
+<section class="glass section-gap" id="vault">
+  <div class="section-head"><h2>Vault 自定义连接器</h2><span class="hint">加密凭证保险库；生成模块永不读取原始凭证</span></div>
+  <div class="callout">
+    这里是 <b>Vault（凭证保险库）</b>，不是钱包：保存第三方站点的登录 / 调用凭证，与货币无关。
+    选择连接器类型后填写对应结构化字段（API 密钥、用户名 + 密码、Cookie、Bearer Token、自定义请求头、LocalStorage），
+    全部内容以 <b>Fernet 认证加密</b>写入项目内 <code>vault/cards.json</code>，面板永不回显正文。
+  </div>
+  <div class="form-row">
+    <label>名称<input id="v-name" type="text" placeholder="例如 site_session"></label>
+    <label>连接器类型<select id="v-kind"></select></label>
+    <label>备注<input id="v-note" type="text" placeholder="可选"></label>
+  </div>
+  <div id="v-fields" class="form-grid mt"></div>
+  <div class="btn-row mt"><button class="btn btn-primary" id="btn-vault-add" type="button">新增连接器</button></div>
+  <div class="table-wrap mt">
+    <table class="table">
+      <thead><tr><th>名称</th><th>连接器</th><th>字段摘要（脱敏）</th><th>备注</th><th>加密</th><th>操作</th></tr></thead>
+      <tbody id="vault-body"><tr><td colspan="6" class="muted">加载中…</td></tr></tbody>
+    </table>
+  </div>
+  <div class="callout">凭证经 stdin 注入隔离 Chromium 子进程，按 task_id 会话隔离，任务结束立即销毁；不会混入绘画 / 视频 prompt。</div>
+</section>
+{% endblock %}

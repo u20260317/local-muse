@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}API 源与浏览器会话{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <div class="eyebrow">FREE API POOL · RATE LIMIT</div>
+    <h1>API 源与浏览器会话</h1>
+    <p class="sub">每个服务商独立并发配额与每分钟限速；429 自动冷却熔断，避免短时间大量请求触发风控。</p>
+  </div>
+  <div class="hero-metrics">
+    <div class="metric"><span>服务商</span><b>{{ sources|length }}</b></div>
+    <div class="metric"><span>当前占用</span><b id="metric-inflight">0</b></div>
+    <div class="metric"><span>冷却中</span><b id="metric-cooldown">0</b></div>
+  </div>
+</section>
+
+<section class="glass section-gap">
+  <div class="section-head"><h2>免费 API 源</h2><span class="hint">开关 / 轮询权重 / 并发配额可直接修改并即时生效</span></div>
+  <div class="callout">
+    <b>API Key 不在这个页面填。</b>请到
+    <a class="btn btn-ghost btn-xs" href="/config#api-keys">全局配置 → API Key 管理</a>
+    找到对应服务商（推荐先填 <code>openrouter_free</code>）输入 Key，再点「保存配置」；本页只管开关、权重、并发配额与 RPM。
+    OpenRouter 的 <code>:free</code> 免费模型<strong>仍然需要 Key</strong>；未配置 Key 的源会被自动跳过，不会发起请求。
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>服务商</th><th>类型</th><th>状态</th><th>权重</th><th>并发配额</th><th>当前并发</th><th>RPM</th><th>冷却</th><th>操作</th></tr></thead>
+      <tbody id="sources-body"><tr><td colspan="9" class="muted">加载中…</td></tr></tbody>
+    </table>
+  </div>
+  <div class="callout">选源按 <code>priority</code> 严格优先：<code>openrouter_free</code> 为首选（priority=10），仅当它缺 Key、被禁用或处于 429 冷却时才降级到其它源；同档内按 weight 加权轮询。免费额度、限速与接口地址以各家官方最新文档为准，详见 <code>docs/api_list.md</code>。</div>
+</section>
+
+<div class="two-col section-gap">
+  <section class="glass">
+    <div class="section-head"><h2>额度消耗 / 风控日志</h2><span class="hint">含 429 冷却记录</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>时间</th><th>服务商</th><th>task_id</th><th>状态</th><th>备注</th></tr></thead>
+        <tbody id="usage-body"><tr><td colspan="5" class="muted">暂无记录</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="glass">
+    <div class="section-head"><h2>并行独立 Chromium 会话</h2><span class="hint">每个任务独立用户数据目录</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>会话目录</th><th>task_id</th><th>占用</th></tr></thead>
+        <tbody id="sessions-body"><tr><td colspan="3" class="muted">暂无会话</td></tr></tbody>
+      </table>
+    </div>
+    <div class="btn-row mt">
+      <button class="btn btn-danger-ghost" id="btn-reset-browser" type="button">清空缓存 / 一键重置环境</button>
+      <span class="inline-note" id="sessions-note"></span>
+    </div>
+    <div class="callout">重置会删除 <code>browser_profile/session_*</code>；有运行中的任务时会被拒绝，操作前会二次确认。不会影响本机任何浏览器数据。</div>
+  </section>
+</div>
+{% endblock %}

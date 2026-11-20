@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}并发任务看板{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <div class="eyebrow">CONCURRENT SCHEDULER · 实时</div>
+    <h1>并发任务看板</h1>
+    <p class="sub">调度主循环只分发不等待；多条指令同时入队，按优先级并发执行，任务之间完全隔离。</p>
+  </div>
+  <div class="hero-metrics">
+    <div class="metric"><span>运行中</span><b id="metric-active">0</b></div>
+    <div class="metric"><span>排队中</span><b id="metric-queued">0</b></div>
+    <div class="metric"><span>今日任务</span><b id="metric-today">0</b></div>
+    <div class="metric"><span>累计成功</span><b id="metric-success">0</b></div>
+  </div>
+</section>
+
+<section class="glass trigger-bar">
+  <div class="section-head">
+    <h2>手动触发</h2>
+    <span class="hint">支持一次提交多条并行任务；高优先级测试任务可插队</span>
+  </div>
+  <div class="form-row">
+    <label>任务条数<input id="f-count" type="number" min="1" max="20" value="3"></label>
+    <label>优先级
+      <select id="f-priority">
+        <option value="high_test">高优先级测试任务</option>
+        <option value="manual" selected>面板手动任务</option>
+        <option value="scheduled">定时常规任务</option>
+      </select>
+    </label>
+    <label>入队方式
+      <select id="f-mode"><option value="queue" selected>排队</option><option value="insert">插队（优先派发）</option></select>
+    </label>
+    <label>技能
+      <select id="f-skill"><option value="">加载中…</option></select>
+    </label>
+  </div>
+  <div class="form-row">
+    <label class="grow">指令内容<input id="f-instruction" type="text" maxlength="300" placeholder="例如：生成一条秋日祝福短视频，温暖治愈风格"></label>
+    <label class="check"><input id="f-dryrun" type="checkbox" checked> 自检模式（不调用真实 API，产物标注「模拟」）</label>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btn-submit">提交并行任务</button>
+    <button class="btn btn-ghost" id="btn-quick-test">一键测试单任务</button>
+    <span class="inline-note" id="submit-note"></span>
+  </div>
+</section>
+
+<section class="section-gap">
+  <div class="section-head">
+    <h2>正在运行 <span class="count-pill" id="active-pill">0</span></h2>
+    <span class="hint">每个任务独立 task_id、独立子进程、独立 Chromium 会话与独立超时</span>
+  </div>
+  <div class="cards-grid" id="active-cards">
+    <div class="empty glass">当前没有运行中的任务，提交一条指令即可开始。</div>
+  </div>
+</section>
+
+<div class="two-col section-gap">
+  <section class="glass">
+    <div class="section-head"><h2>优先队列</h2><span class="hint" id="queue-pill">0 条等待</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>task_id</th><th>优先级</th><th>来源</th><th>技能</th><th>入队</th></tr></thead>
+        <tbody id="queue-body"><tr><td colspan="5" class="muted">队列为空</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="glass">
+    <div class="section-head"><h2>历史任务</h2><span class="hint">按 task_id 独立记录</span></div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>task_id</th><th>状态</th><th>阶段</th><th>重试</th><th>模拟</th><th>操作</th></tr></thead>
+        <tbody id="history-body"><tr><td colspan="6" class="muted">暂无记录</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<section class="glass section-gap">
+  <div class="section-head"><h2>产物预览</h2><span class="hint">仅展示项目 output/ 目录内的文件</span></div>
+  <div class="outputs-grid" id="outputs-grid"><div class="empty">暂无产物</div></div>
+</section>
+{% endblock %}

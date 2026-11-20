@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Skill 管理{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <div class="eyebrow">AGENT PROMPT LIBRARY</div>
+    <h1>Skill 管理</h1>
+    <p class="sub">全部提示词与工作流模板存放于 <code>docs/skills/</code>，可在线查看、编辑与新增，决策引擎即时读取。</p>
+  </div>
+  <div class="hero-metrics">
+    <div class="metric"><span>技能总数</span><b>{{ skills|length }}</b></div>
+    <div class="metric"><span>启用中</span><b>{{ enabled_count }}</b></div>
+  </div>
+</section>
+
+<div class="skills-layout section-gap">
+  <section class="glass">
+    <div class="section-head"><h2>技能列表</h2><span class="hint">点击加载正文</span></div>
+    <div class="skill-list" id="skill-list">
+      {% for s in skills %}
+      <button type="button" class="skill-item" data-skill="{{ s.name }}">
+        <span class="skill-title">{{ s.title }}</span>
+        <span class="skill-meta">{{ s.name }} · {{ s.chars }} 字 · {{ '启用' if s.enabled else '禁用' }}</span>
+        <span class="skill-desc">{{ s.description }}</span>
+      </button>
+      {% else %}
+      <div class="empty">尚无技能文件</div>
+      {% endfor %}
+    </div>
+    <div class="btn-row mt"><button class="btn btn-ghost" id="btn-skill-new" type="button">新增技能</button></div>
+  </section>
+
+  <section class="glass">
+    <div class="section-head"><h2>Markdown 编辑器</h2><span class="hint" id="skill-counter">0 字</span></div>
+    <label class="block-label">文件名（不含 .md，仅字母数字下划线连字符）<input id="skill-name" type="text" placeholder="例如 holiday_video_v3"></label>
+    <textarea id="skill-content" class="editor" spellcheck="false" placeholder="在此编写 System Prompt / 工作流模板…"></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-skill-save" type="button">保存技能</button>
+      <button class="btn btn-danger-ghost" id="btn-skill-delete" type="button">删除当前技能</button>
+      <span class="inline-note" id="skill-note"></span>
+    </div>
+    <div class="section-head mt"><h2>正文预览</h2><span class="hint">纯文本预览，避免执行任何嵌入内容</span></div>
+    <pre class="preview" id="skill-preview">（选择左侧技能或新增一个技能）</pre>
+    <div class="callout">路径安全：文件名经过白名单校验并强制限定在 docs/skills/ 目录内，内置三个技能不可删除。</div>
+  </section>
+</div>
+{% endblock %}

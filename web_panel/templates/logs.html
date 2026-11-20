@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}实时日志与产物{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <div class="eyebrow">TASK-ID TAGGED LOG STREAM</div>
+    <h1>实时日志与产物</h1>
+    <p class="sub">每条日志带 task_id 与阶段标记，可按任务聚焦；敏感凭证在写入日志前已脱敏。</p>
+  </div>
+  <div class="hero-metrics">
+    <div class="metric"><span>INFO</span><b id="metric-info">0</b></div>
+    <div class="metric"><span>WARNING</span><b id="metric-warn">0</b></div>
+    <div class="metric"><span>ERROR</span><b id="metric-error">0</b></div>
+  </div>
+</section>
+
+<section class="glass section-gap">
+  <div class="section-head"><h2>日志过滤</h2><span class="hint">默认自动滚动最新记录</span></div>
+  <div class="form-row">
+    <label>task_id<input id="log-task" type="text" placeholder="留空显示全部"></label>
+    <label>级别
+      <select id="log-level"><option value="ALL">全部</option><option value="INFO">INFO</option><option value="WARNING">WARNING</option><option value="ERROR">ERROR</option><option value="DEBUG">DEBUG</option></select>
+    </label>
+    <label class="check"><input id="log-autoscroll" type="checkbox" checked> 自动滚动</label>
+    <label class="check"><input id="log-pause" type="checkbox"> 暂停刷新</label>
+    <button class="btn btn-ghost" id="btn-log-clear" type="button">清空视图</button>
+  </div>
+  <div class="log-stream" id="log-stream"><div class="empty">等待日志…</div></div>
+</section>
+
+<section class="glass section-gap">
+  <div class="section-head"><h2>产物预览</h2><span class="hint">图片 / 视频 / dry_run 清单</span></div>
+  <div class="outputs-grid" id="outputs-grid"><div class="empty">暂无产物</div></div>
+</section>
+{% endblock %}

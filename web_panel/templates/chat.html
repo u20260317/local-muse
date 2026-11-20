@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}对话工作台{% endblock %}
+{% block content %}
+<style>
+  body[data-page="chat"] .container { max-width: 100%; }
+  .chat-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr) 310px;
+                gap: 14px; height: calc(100vh - 166px); min-height: 560px;
+                transition: grid-template-columns .2s ease; }
+  .chat-shell.left-collapsed { grid-template-columns: minmax(0, 1fr) 310px; }
+  .chat-shell.right-collapsed { grid-template-columns: 250px minmax(0, 1fr); }
+  .chat-shell.left-collapsed.right-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .chat-shell.left-collapsed .chat-side,
+  .chat-shell.right-collapsed .chat-right { display: none; }
+  .chat-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .chat-right .section-head { align-items: center; }
+  .pane-toggle, .pane-collapse { white-space: nowrap; }
+  .pane-toggle.off { opacity: .5; }
+  .pane-collapse { padding: 0 8px; }
+  .chat-col { background: rgba(18, 24, 44, .72); border: 1px solid rgba(126, 160, 255, .14);
+              border-radius: 14px; padding: 14px; display: flex; flex-direction: column; min-height: 0; }
+  .chat-side-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .chat-side-head h2 { margin: 0; font-size: 15px; letter-spacing: .5px; }
+  .conv-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .conv-item { padding: 9px 10px; border-radius: 9px; border: 1px solid transparent;
+               background: rgba(255, 255, 255, .035); cursor: pointer; transition: .15s; }
+  .conv-item:hover { background: rgba(120, 160, 255, .10); }
+  .conv-item.active { border-color: rgba(90, 200, 255, .45); background: rgba(80, 170, 255, .14); }
+  .conv-name { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv-meta { display: block; font-size: 11px; opacity: .55; margin-top: 3px; }
+  .conv-tools { display: flex; gap: 4px; margin-top: 6px; opacity: .55; }
+  .conv-item:hover .conv-tools { opacity: 1; }
+  .chat-head { display: flex; align-items: center; justify-content: space-between;
+               padding-bottom: 12px; border-bottom: 1px solid rgba(126, 160, 255, .12); }
+  .chat-head h1 { margin: 3px 0 0; font-size: 20px; }
+  .eyebrow { font-size: 10px; letter-spacing: 2px; color: #5fc9e8; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 14px 4px; display: flex;
+                   flex-direction: column; gap: 12px; }
+  .msg { max-width: 82%; padding: 10px 13px; border-radius: 12px; font-size: 13px;
+         line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: linear-gradient(135deg, #2b6fd8, #5b4bd8); color: #fff; }
+  .msg.assistant { align-self: flex-start; background: rgba(255, 255, 255, .06);
+                   border: 1px solid rgba(126, 160, 255, .14); }
+  .msg-time { display: block; font-size: 10px; opacity: .5; margin-top: 5px; }
+  .chat-empty { margin: auto; text-align: center; opacity: .55; font-size: 13px; line-height: 1.9; }
+  .chat-composer { border-top: 1px solid rgba(126, 160, 255, .12); padding-top: 12px; }
+  .chat-composer textarea { width: 100%; resize: vertical; min-height: 66px; }
+  .chat-options { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-top: 10px; }
+  .chat-options label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; min-width: 92px; }
+  .chat-options .check { flex-direction: row; align-items: center; min-width: auto; }
+  .chat-right h2 { font-size: 14px; margin: 0; }
+  .chat-tasks, .chat-steps { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .chat-tasks { flex: 1; min-height: 90px; }
+  .chat-steps { flex: 1; min-height: 90px; }
+  .task-card { border: 1px solid rgba(126, 160, 255, .14); border-radius: 10px;
+               padding: 10px; background: rgba(255, 255, 255, .035); }
+  .task-card .t-row { display: flex; justify-content: space-between; font-size: 11px; gap: 8px; }
+  .bar { height: 5px; border-radius: 4px; background: rgba(255, 255, 255, .09); margin-top: 8px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #39c6e8, #6a5bff); }
+  .step-line { font-size: 11px; opacity: .75; border-left: 2px solid rgba(95, 201, 232, .4);
+               padding-left: 8px; line-height: 1.6; }
+  @media (max-width: 1100px) {
+    .chat-shell { grid-template-columns: 200px minmax(0, 1fr); height: auto; }
+    .chat-right { grid-column: 1 / -1; min-height: 220px; }
+    .chat-shell.left-collapsed { grid-template-columns: minmax(0, 1fr); }
+    .chat-shell.right-collapsed { grid-template-columns: 200px minmax(0, 1fr); }
+    .chat-shell.left-collapsed.right-collapsed { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+<section class="chat-shell" id="chat-shell">
+  <aside class="chat-col chat-side">
+    <div class="chat-side-head"><h2>会话</h2>
+      <div class="chat-head-actions">
+        <button class="btn btn-primary btn-xs" id="btn-new-conv" type="button">＋ 新会话</button>
+        <button class="btn btn-ghost btn-xs pane-collapse" id="btn-collapse-left" type="button" title="收起会话栏" aria-label="收起会话栏">‹</button>
+      </div></div>
+    <div class="conv-list" id="conv-list"></div>
+    <div class="callout" style="margin-top:10px;font-size:11px">会话与消息保存在 <code>db/task.db</code>（SQLite），重启后仍可恢复。</div>
+  </aside>
+
+  <section class="chat-col chat-main">
+    <div class="chat-head">
+      <div><div class="eyebrow">CONVERSATION · 本地自治 Agent</div><h1 id="conv-title">对话工作台</h1></div>
+      <div class="chat-head-actions">
+        <button class="btn btn-ghost btn-xs pane-toggle" id="btn-toggle-left" type="button" aria-pressed="true">◧ 会话</button>
+        <button class="btn btn-ghost btn-xs pane-toggle" id="btn-toggle-right" type="button" aria-pressed="true">◨ 执行</button>
+        <span class="chip" id="conv-task-count">本会话 0 个任务</span>
+      </div>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-empty">还没有会话。<br>点击左侧「＋ 新会话」，然后给 Agent 下一条指令。</div>
+    </div>
+    <form class="chat-composer" id="chat-form">
+      <textarea id="chat-input" placeholder="给 Agent 下指令，例如：生成一条秋日祝福短视频，温暖治愈风格"></textarea>
+      <div class="chat-options">
+        <label>技能<select id="chat-skill"></select></label>
+        <label>优先级<select id="chat-priority">
+          <option value="manual">普通</option><option value="high_test">高优插队</option>
+          <option value="scheduled">定时</option></select></label>
+        <label>并发条数<input id="chat-count" type="number" min="1" max="20" value="1"></label>
+        <label class="check"><input id="chat-dry" type="checkbox" checked> 自检模式（不调用真实 API）</label>
+        <button class="btn btn-primary" id="btn-chat-send" type="submit">发送并执行</button>
+      </div>
+      <div class="inline-note" id="chat-note"></div>
+    </form>
+  </section>
+
+  <aside class="chat-col chat-right">
+    <div class="section-head"><h2>当前执行</h2><span class="hint">阶段 / 进度</span>
+      <button class="btn btn-ghost btn-xs pane-collapse" id="btn-collapse-right" type="button" title="收起执行栏" aria-label="收起执行栏">›</button></div>
+    <div class="chat-tasks" id="chat-tasks"><div class="muted" style="font-size:12px">暂无任务</div></div>
+    <div class="section-head mt"><h2>阶段日志</h2></div>
+    <div class="chat-steps" id="chat-steps"></div>
+  </aside>
+</section>
+{% endblock %}

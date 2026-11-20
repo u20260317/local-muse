@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>{% block title %}Local-Muse{% endblock %} · 本地自治 Agent 控制台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-page="{{ page }}">
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">LM</span>
+      <span class="brand-text"><strong>LOCAL·MUSE</strong><small>本地自治 Agent 控制台</small></span>
+    </a>
+    <nav class="nav">
+      <a href="/" class="{{ 'active' if page == 'chat' else '' }}">对话工作台</a>
+      <a href="/board" class="{{ 'active' if page == 'dashboard' else '' }}">并发看板</a>
+      <a href="/config" class="{{ 'active' if page == 'config' else '' }}">全局配置</a>
+      <a href="/skills" class="{{ 'active' if page == 'skills' else '' }}">Skill 管理</a>
+      <a href="/sources" class="{{ 'active' if page == 'sources' else '' }}">API 源 / 会话</a>
+      <a href="/logs" class="{{ 'active' if page == 'logs' else '' }}">实时日志</a>
+    </nav>
+    <div class="top-status">
+      <span class="chip" id="top-active"><i class="dot dot-live"></i>并发 0 / 2</span>
+      <span class="chip chip-warn hidden" id="top-degraded">硬件降级中</span>
+    </div>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="statusbar">
+    <span class="status-item">CPU <b id="bar-cpu">--</b>%</span>
+    <span class="status-item">内存 <b id="bar-mem">--</b>%</span>
+    <span class="status-item">活跃 <b id="bar-active">0</b></span>
+    <span class="status-item">排队 <b id="bar-queue">0</b></span>
+    <span class="status-item" id="bar-degraded"><i class="dot dot-ok"></i>调度正常</span>
+    <span class="status-push">仅本机 http://{{ host }}:{{ port }} · v{{ version }} · 独立 Chromium 隔离</span>
+  </footer>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
